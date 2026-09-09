@@ -123,7 +123,7 @@ extension NSPredicate {
     }
 
     static var pumpEventsNotYetUploadedToNightscout: NSPredicate {
-        let date = Date.oneDayAgo
+        let date = Date(timeIntervalSince1970: 1787727600)
         return NSPredicate(format: "timestamp >= %@ AND isUploadedToNS == %@", date as NSDate, false as NSNumber)
     }
 
