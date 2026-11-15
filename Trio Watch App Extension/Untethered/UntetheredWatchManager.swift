@@ -1774,13 +1774,19 @@ import WatchKit
             resend(missing.map(\.id))
             streamRecords()
         }
-        finishSyncIfDone(epoch: epoch)
+        finishSyncIfDone(epoch: epoch, askedByPhone: true)
     }
 
-    private func finishSyncIfDone(epoch: Int) {
+    private func finishSyncIfDone(epoch: Int, askedByPhone: Bool = false) {
         let session = store.data.session
         let over = epoch != session.epoch || session.phase == .idle
-        guard over, store.data.entries[epoch] != nil, (store.data.pending[epoch] ?? [:]).isEmpty else { return }
+        guard over, (store.data.pending[epoch] ?? [:]).isEmpty else { return }
+        // a session with no records here (a takeover that failed, or one synced already) is done as well: the phone
+        // otherwise waited for it for good, and its pod gap check stayed off (Claude Fable's review, 15 November)
+        guard store.data.entries[epoch] != nil else {
+            if askedByPhone { send(.syncDone, epoch: epoch) }
+            return
+        }
         send(.syncDone, epoch: epoch)
         store.update {
             $0.pending[epoch] = nil
