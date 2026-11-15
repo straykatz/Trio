@@ -510,7 +510,16 @@ extension UntetheredWatchManager {
             Task { await WatchLogger.shared.log("⌚️ Untethered bolus (\(source.rawValue)): \(line)", force: true) }
         }
         log("\(units) U requested")
-        guard !isFinalizing, let pump = pumpManager, let grant = data.grant else {
+        // the phone is taking the pump back (the watch leaves the pod to it), or the hand-back is in its last stage:
+        // a bolus now would take the pod's one connection the phone needs, as the loop's own check `mayDose` knows
+        // (Ponytail's review, 15 November). Remote boluses come this way too.
+        let handingBack = String(localized: "The pump is being handed to the iPhone. Bolus from the iPhone once it has the pump.")
+        if (podQuietUntil ?? .distantPast) > Date() {
+            log("not delivered: \(handingBack)")
+            notifyBolus(units, delivered: false, message: handingBack, source: source)
+            return completion(false, handingBack)
+        }
+        guard !isFinalizing, mayDose, let pump = pumpManager, let grant = data.grant else {
             let reason = UntetheredWatchError.noPump.localizedDescription
             log("not delivered: \(reason)")
             notifyBolus(units, delivered: false, message: reason, source: source)
@@ -520,6 +529,12 @@ extension UntetheredWatchManager {
         let rounded = pump.roundToSupportedBolusVolume(units: amount.nearestDouble)
         if amount < units { log("limited to the max bolus of \(grant.maxBolus) U") }
         Task { @MainActor in
+            // checked again right before the pod command, as the loop does
+            guard self.mayDose else {
+                log("not delivered: \(handingBack)")
+                self.notifyBolus(Decimal(rounded), delivered: false, message: handingBack, source: source)
+                return completion(false, handingBack)
+            }
             do {
                 try await pump.enactBolus(units: rounded, automatic: false)
                 log("\(rounded) U started")

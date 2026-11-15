@@ -14,22 +14,95 @@ enum UntetheredGate {
     private static let lock = NSLock()
     private static let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("untethered-phone.json")
-    private static var cached: UntetheredPhoneState = (try? Data(contentsOf: url))
-        .flatMap { try? JSONDecoder().decode(UntetheredPhoneState.self, from: $0) } ?? UntetheredPhoneState()
+    private static var cached = UntetheredPhoneState()
+    /// The saved state is there but can't be read yet: iOS can wake Trio after a restart before the first unlock,
+    /// when the file is still protected. Until it is read, the phone doesn't dose and saves nothing over it: an idle
+    /// state written then would wipe out the watch's running session (Ponytail's review, 15 November).
+    private static var locked = false
+    private static var loaded = false
 
-    static var state: UntetheredPhoneState { lock.withLock { cached } }
+    /// Reads the saved state once, and again while it is locked. Called with the lock held.
+    private static func loadIfNeeded() {
+        guard !loaded || locked else { return }
+        loaded = true
+        let saved: Data
+        do {
+            saved = try Data(contentsOf: url)
+        } catch {
+            if (error as? CocoaError)?.code == .fileReadNoSuchFile || !FileManager.default.fileExists(atPath: url.path) {
+                locked = false
+                return
+            }
+            if !locked {
+                locked = true
+                warning(.watch, "Untethered: saved state locked (\(error.localizedDescription)); no dosing until it opens")
+                DispatchQueue.main.async { observeProtectedData() }
+            }
+            return
+        }
+        if locked {
+            debug(.watch, "Untethered: saved state open again, taken on")
+            // what launch would have resumed from it runs now (`UntetheredPhoneManager.stateOpened`)
+            DispatchQueue.main.async {
+                Foundation.NotificationCenter.default.post(name: .untetheredGateOpened, object: nil)
+                Foundation.NotificationCenter.default.post(name: .untetheredGateDidChange, object: nil)
+            }
+        }
+        locked = false
+        do {
+            cached = try JSONDecoder().decode(UntetheredPhoneState.self, from: saved)
+        } catch {
+            // kept aside rather than overwritten by the next save, so nothing is lost silently
+            let aside = url.appendingPathExtension("unreadable")
+            try? FileManager.default.removeItem(at: aside)
+            try? FileManager.default.moveItem(at: url, to: aside)
+            cached = UntetheredPhoneState()
+            warning(.watch, "Untethered: saved state unreadable, kept aside: \(error)")
+        }
+    }
+
+    private static var protectedDataObserver: NSObjectProtocol?
+
+    /// Reads again as soon as the phone is unlocked, and tells the screens and the manager.
+    private static func observeProtectedData() {
+        guard protectedDataObserver == nil else { return }
+        protectedDataObserver = Foundation.NotificationCenter.default.addObserver(
+            forName: UIApplication.protectedDataDidBecomeAvailableNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            // opening posts what follows itself
+            lock.withLock { loadIfNeeded() }
+        }
+    }
+
+    static var state: UntetheredPhoneState { lock.withLock {
+        loadIfNeeded()
+        return cached
+    } }
+
+    /// The saved state couldn't be read yet.
+    static var isLocked: Bool { lock.withLock {
+        loadIfNeeded()
+        return locked
+    } }
 
     /// The phone may loop, bolus and change the pump.
     static var phoneMayDose: Bool {
-        let state = self.state
-        return state.session.isIdle && !state.pumpReturnPending
+        let (state, locked) = lock.withLock { () -> (UntetheredPhoneState, Bool) in
+            loadIfNeeded()
+            return (cached, self.locked)
+        }
+        return !locked && state.session.isIdle && !state.pumpReturnPending
     }
 
-    /// Every change reaches the screens, whichever path made it.
+    /// Every change reaches the screens, whichever path made it. While the saved state is locked a change stays in
+    /// memory only; the saved state, once read, is what counts.
     @discardableResult static func update<T>(_ change: (inout UntetheredPhoneState) -> T) -> T {
         let result = lock.withLock {
+            loadIfNeeded()
             let result = change(&cached)
-            if let data = try? JSONEncoder().encode(cached) {
+            if !locked, let data = try? JSONEncoder().encode(cached) {
                 try? data.write(to: url, options: .atomic)
             }
             return result
@@ -44,6 +117,7 @@ enum UntetheredGate {
 extension Notification.Name {
     static let untetheredSessionDidChange = Notification.Name("untetheredSessionDidChange")
     static let untetheredGateDidChange = Notification.Name("untetheredGateDidChange")
+    static let untetheredGateOpened = Notification.Name("untetheredGateOpened")
 }
 
 enum UntetheredError: LocalizedError {
@@ -107,6 +181,9 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         openAPS = OpenAPS(storage: storage, tddStorage: tddStorage, glucoseStorage: glucoseStorage, carbsStorage: carbsStorage)
         Foundation.NotificationCenter.default.publisher(for: .untetheredGateDidChange)
             .sink { [weak self] _ in Task { @MainActor in self?.publish() } }
+            .store(in: &subscriptions)
+        Foundation.NotificationCenter.default.publisher(for: .untetheredGateOpened)
+            .sink { [weak self] _ in Task { @MainActor in await self?.stateOpened() } }
             .store(in: &subscriptions)
         Foundation.NotificationCenter.default.publisher(for: .didUpdateOverrideConfiguration)
             .receive(on: DispatchQueue.main)
@@ -183,10 +260,23 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             // the home screen's banner warns while the iPhone's Bluetooth is off (the state manager is main-actor)
             self.apsManager.bluetoothManager?.addBluetoothObserver(self, queue: .main)
             await self.forwardCancellations()
+            if UntetheredGate.isLocked {
+                self.setError(String(localized: "Trio can't read its watch mode state until the iPhone is unlocked. The iPhone doesn't dose until then."))
+            }
             if self.state.pumpReturnPending { await self.finishPumpReturn() }
             await self.uploadSpans()
             self.updateTimers()
         }
+    }
+
+    /// The saved state, locked at launch, opened: what launch resumes from it runs now (Claude Fable's review,
+    /// 15 November).
+    @MainActor private func stateOpened() async {
+        // the message about the locked state lived in memory only; the state read now has its own
+        wasIdle = state.session.isIdle
+        if state.pumpReturnPending { await finishPumpReturn() }
+        updateTimers()
+        publish()
     }
 
     var isWatchInCharge: Bool { !state.session.isIdle }
@@ -433,6 +523,9 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
 
     /// - Returns: why the start was refused, nil when it went on to the watch
     @discardableResult @MainActor func start(linkedOverrideID: String? = nil) async -> String? {
+        guard !UntetheredGate.isLocked else {
+            return String(localized: "Trio can't read its watch mode state until the iPhone is unlocked. The iPhone doesn't dose until then.")
+        }
         guard state.session.isIdle, !state.pumpReturnPending else {
             return String(localized: "The phone is still taking the pump back from the last session.")
         }
@@ -485,6 +578,11 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
     /// Reaches for the pod before the watch is told to stop: a phone that can't reach it leaves the watch dosing,
     /// instead of taking a pump that then neither side doses.
     @MainActor func forceTakeBack() async {
+        // the state locked: whether the watch has the pump is unknown here, and the take-back would save over it
+        guard !UntetheredGate.isLocked else {
+            setError(String(localized: "Trio can't read its watch mode state until the iPhone is unlocked. The iPhone doesn't dose until then."))
+            return
+        }
         guard let control = apsManager.pumpManager as? ExclusiveDeviceControl else {
             await apply(.forceTakeBack)
             return
@@ -541,6 +639,13 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
 
     /// `payload` holds an `UntetheredEnvelope`. Every path calls `replyHandler` when there is one.
     func receive(_ payload: [String: Any], replyHandler: (([String: Any]) -> Void)?) {
+        // the saved state locked: its epoch and phase are unknown, and a message taken on now (the watch holding the
+        // pump, say) would release the pod beside a state that, once read, says otherwise. The watch sends again.
+        if UntetheredGate.isLocked {
+            debug(.watch, "Untethered: message from the watch left, the saved state is locked")
+            replyHandler?([:])
+            return
+        }
         guard let envelope = try? UntetheredEnvelope.decode(payload) else {
             warning(.watch, "Untethered: unreadable message from the watch")
             replyHandler?([:])

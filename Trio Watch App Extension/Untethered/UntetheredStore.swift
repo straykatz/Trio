@@ -153,15 +153,36 @@ extension UntetheredWatchData {
 final class UntetheredStore {
     private let url: URL
     private(set) var data: UntetheredWatchData
+    /// The saved state is there but can't be read yet, as before the first unlock after a restart (its file is
+    /// protected until then). Nothing is saved over it meanwhile: an idle state written then would wipe out a running
+    /// session (Ponytail's review, 15 November).
+    private(set) var isLocked = false
 
     init(fileName: String = "untethered-watch.json") {
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         url = directory.appendingPathComponent(fileName)
-        guard let saved = try? Data(contentsOf: url) else {
-            data = UntetheredWatchData()
-            return
+        data = UntetheredWatchData()
+        _ = load()
+    }
+
+    /// Reads the saved state: true when there is one now, or none at all; false while it is locked.
+    private func load() -> Bool {
+        let saved: Data
+        do {
+            saved = try Data(contentsOf: url)
+        } catch {
+            if (error as? CocoaError)?.code == .fileReadNoSuchFile || !FileManager.default.fileExists(atPath: url.path) {
+                isLocked = false
+                return true
+            }
+            if !isLocked {
+                Task { await WatchLogger.shared.log("⌚️ Untethered: saved state locked, nothing saved until it opens: \(error)", force: true) }
+            }
+            isLocked = true
+            return false
         }
+        isLocked = false
         do {
             data = try JSONDecoder().decode(UntetheredWatchData.self, from: saved)
         } catch {
@@ -171,10 +192,19 @@ final class UntetheredStore {
             data = UntetheredWatchData()
             Task { await WatchLogger.shared.log("⌚️ Untethered: saved state unreadable, kept aside: \(error)", force: true) }
         }
+        return true
+    }
+
+    /// While the saved state is locked, tries it again: true once it was read now (the caller takes it on).
+    func openIfLocked() -> Bool {
+        guard isLocked else { return false }
+        return load()
     }
 
     @discardableResult func update<T>(_ change: (inout UntetheredWatchData) -> T) -> T {
         let result = change(&data)
+        // locked: the change stays in memory only; the saved state, once read, is what counts
+        guard !isLocked else { return result }
         do {
             try JSONEncoder().encode(data).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         } catch {

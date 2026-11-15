@@ -164,6 +164,11 @@ import WatchKit
     var isActive: Bool { data.session.phase == .active || data.session.phase == .ending }
 
     private init() {
+        adoptSavedState()
+    }
+
+    /// Takes on the saved state: at launch, and when a state locked at launch opens later.
+    private func adoptSavedState() {
         data = store.data
         // before the watch's own G7 reader starts at launch: a running session keeps the sensor
         updateReaderStandAside()
@@ -185,6 +190,11 @@ import WatchKit
 
     /// Every change reaches the screens at once, with the phone or without it.
     func refresh() {
+        if store.openIfLocked() {
+            Task { await WatchLogger.shared.log("⌚️ Untethered: saved state open again, taken on", force: true) }
+            adoptSavedState()
+            return
+        }
         data = store.data
         updateHandbackWarning()
         // a new session counts from its own start
@@ -587,6 +597,20 @@ import WatchKit
         reply: (([String: Any]) -> Void)? = nil,
         also change: ((inout UntetheredWatchData) -> Void)? = nil
     ) {
+        // a saved state still locked (before the first unlock after a restart) may hold a running session: nothing
+        // starts or changes over it, and the phone, without an answer, keeps or takes back the pump
+        // The step that found it open is left too: the devices of the state taken on are restored a main-queue hop
+        // later, and the step would run without them (Claude Fable's review, 15 November). The phone sends again.
+        if store.isLocked {
+            if store.openIfLocked() {
+                adoptSavedState()
+                Task { await WatchLogger.shared.log("⌚️ Untethered: saved state open again, taken on; this session step left", force: true) }
+            } else {
+                Task { await WatchLogger.shared.log("⌚️ Untethered: a session step left for later, the saved state is locked", force: true) }
+            }
+            reply?([:])
+            return
+        }
         let wasActive = isActive
         let wasIdle = store.data.session.phase == .idle
         let wasFallbackStart = isFallbackSession && store.data.session.phase == .starting

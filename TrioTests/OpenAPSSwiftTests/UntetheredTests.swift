@@ -189,6 +189,27 @@ import Testing
         #expect(notHolding.phase == .idle)
     }
 
+    @Test("start: a takeover reported after the phone gave up is answered with a revoke") func lateTakeoverComplete() {
+        var phone = UntetheredSession()
+        _ = phone.phone(.start(grant()), now: t0)
+        _ = phone.phone(.received(.prepared, epoch: phone.epoch), now: t0)
+        _ = phone.phone(.tick, now: t0 + 131)
+        // no answer to the query: the phone takes the pump back
+        #expect(phone.phone(.tick, now: t0 + 400) == [.takePump])
+        #expect(phone.phase == .idle)
+        #expect(phone.phone(.received(.takeoverComplete(podStatus), epoch: phone.epoch), now: t0 + 401) == [.send(.revoke), .reconcile])
+        #expect(phone.phase == .idle)
+        // another session's report is not this one's to revoke
+        #expect(phone.phone(.received(.takeoverComplete(podStatus), epoch: phone.epoch - 1), now: t0 + 402) == [])
+    }
+
+    @Test("end: a takeover report sent again after the hand-back is no takeover") func takeoverReportAfterHandback() {
+        var (phone, _) = started()
+        _ = phone.phone(.received(.handback(podStatus), epoch: phone.epoch), now: t0 + 200)
+        #expect(phone.phase == .idle)
+        #expect(phone.phone(.received(.takeoverComplete(podStatus), epoch: phone.epoch), now: t0 + 201) == [])
+    }
+
     @Test("start: an answer late in the offer gets the full lease, the same on both sides") func lateAnswerLease() {
         var phone = UntetheredSession()
         var watch = UntetheredSession()
