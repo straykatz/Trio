@@ -750,10 +750,21 @@ final class BaseAPSManager: APSManager, Injectable {
                 }
             }
             if retryError == nil, String(describing: bolusError).contains("Another controller has used this pod") {
-                let message = String(
-                    localized: "Nothing was given: the watch was checking the pod. Please try again in a moment.",
-                    comment: "A bolus refused before it reached the pod, because the watch had just looked at the pod"
-                )
+                // the refusal may also come from a session of the watch's the phone hadn't heard of: then the watch
+                // has the pump (Ponytail's review, 15 November)
+                let watchHasPump = await MainActor.run { () -> Bool in
+                    let session = UntetheredGate.state.session
+                    return !session.isIdle && !session.isCheckingForeignSession
+                }
+                let message = watchHasPump
+                    ? String(
+                        localized: "Nothing was given: the watch has the pump. Bolus on the watch.",
+                        comment: "A bolus refused before it reached the pod, because the watch holds the pump"
+                    )
+                    : String(
+                        localized: "Nothing was given: the watch was checking the pod. Please try again in a moment.",
+                        comment: "A bolus refused before it reached the pod, because the watch had just looked at the pod"
+                    )
                 if isSMB {
                     debug(.bolus, "SMB of \(roundedAmount) U refused after the watch's look at the pod; the next loop decides")
                 } else {

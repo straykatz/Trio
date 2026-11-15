@@ -271,12 +271,24 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
 
     /// The saved state, locked at launch, opened: what launch resumes from it runs now (Claude Fable's review,
     /// 15 November).
+    /// Messages from the watch that came while the saved state was locked, in the order they came.
+    private var lockedMessages: [[String: Any]] = []
+    private let lockedMessagesLock = NSLock()
+    private static let lockedMessagesLimit = 200
+
     @MainActor private func stateOpened() async {
         // the message about the locked state lived in memory only; the state read now has its own
         wasIdle = state.session.isIdle
-        if state.pumpReturnPending { await finishPumpReturn() }
+        // the kept messages first: a pump return waits on the pod, and an answer among them may decide it
+        let kept = lockedMessagesLock.withLock { () -> [[String: Any]] in
+            defer { lockedMessages.removeAll() }
+            return lockedMessages
+        }
+        if !kept.isEmpty { debug(.watch, "Untethered: taking on \(kept.count) message(s) kept while the saved state was locked") }
+        for payload in kept { receive(payload, replyHandler: nil) }
         updateTimers()
         publish()
+        if state.pumpReturnPending { await finishPumpReturn() }
     }
 
     var isWatchInCharge: Bool { !state.session.isIdle }
@@ -640,9 +652,15 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
     /// `payload` holds an `UntetheredEnvelope`. Every path calls `replyHandler` when there is one.
     func receive(_ payload: [String: Any], replyHandler: (([String: Any]) -> Void)?) {
         // the saved state locked: its epoch and phase are unknown, and a message taken on now (the watch holding the
-        // pump, say) would release the pod beside a state that, once read, says otherwise. The watch sends again.
+        // pump, say) would release the pod beside a state that, once read, says otherwise. Kept and taken on once the
+        // state opens: some the watch sends only once, as its release (Ponytail's review, 15 November).
         if UntetheredGate.isLocked {
-            debug(.watch, "Untethered: message from the watch left, the saved state is locked")
+            let kept = lockedMessagesLock.withLock { () -> Bool in
+                guard lockedMessages.count < Self.lockedMessagesLimit else { return false }
+                lockedMessages.append(payload)
+                return true
+            }
+            debug(.watch, "Untethered: message from the watch \(kept ? "kept for later" : "left (too many kept)"), the saved state is locked")
             replyHandler?([:])
             return
         }
@@ -670,10 +688,13 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
                     await self.apply(.watchHoldsPump(epoch: envelope.epoch, status: status))
                 case .statusReport(holding: nil) where self.state.session.phase == .starting:
                     await self.apply(.watchHoldsPump(epoch: envelope.epoch, status: nil))
-                // only while idle: during the ownership check (`.starting`) records say nothing about who holds
-                // the pod, and taken as "not holding" they'd end the check and drop the records (below)
+                // records alone don't hand the pump over: the watch is asked (Ponytail's review, 15 November). Only
+                // while idle: during the ownership check (`.starting`) the answer to it decides.
                 case .records where self.state.session.isIdle:
-                    await self.apply(.watchHoldsPump(epoch: envelope.epoch, status: nil))
+                    await self.apply(.watchRecordsSeen(epoch: envelope.epoch))
+                // a session the phone never knew is over: its later messages then belong to an ended session
+                case .released, .takeoverFailed:
+                    await self.apply(.watchSessionEnded(epoch: envelope.epoch))
                 default: break
                 }
             }
@@ -1371,7 +1392,9 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         defer { if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask) } }
         let escalation = Task { @MainActor in
             try? await Task.sleep(nanoseconds: Self.pumpEscalateAfter)
-            guard !Task.isCancelled, let control, !control.isControlReady else { return }
+            // not once the watch holds the pump again: escalating lifts the release (Ponytail's review, 15 November)
+            guard !Task.isCancelled, let control, !control.isControlReady, self.state.pumpReturnPending,
+                  !control.isControlReleased else { return }
             let outcome = control.escalateTakeControl() ?? "nothing to escalate"
             debug(.watch, "Untethered: no pump link after 12 s, escalating: \(outcome)")
         }

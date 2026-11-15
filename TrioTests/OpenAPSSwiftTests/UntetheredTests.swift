@@ -448,6 +448,60 @@ import Testing
         #expect(phone.unknownWatchSince == nil)
     }
 
+    @Test("ended watch session: its release and its last records never make the phone stand aside again")
+    func endedWatchSessionStaysEnded() {
+        // the phone came back while the watch's fallback session ran: its pod command was refused, it asks
+        var watch = UntetheredSession()
+        _ = watch.watch(.startWithoutPhone, now: t0)
+        _ = watch.watch(.takeoverSucceeded(podStatus), now: t0 + 30)
+        var phone = UntetheredSession()
+        #expect(phone.phone(.foreignSessionDetected(podStatus), now: t0 + 600) == [.send(.statusQuery)])
+        // the watch let go meanwhile and answers "not holding" for its session
+        #expect(phone.phone(.watchHoldsPump(epoch: watch.epoch, status: nil), now: t0 + 601) == [.takePump, .reconcile])
+        #expect(phone.isIdle)
+        #expect(phone.epoch == watch.epoch)
+        // its release and its records are that ended session's
+        #expect(phone.phone(.watchSessionEnded(epoch: watch.epoch), now: t0 + 602) == [])
+        #expect(phone.phone(.watchRecordsSeen(epoch: watch.epoch), now: t0 + 603) == [])
+        #expect(phone.phone(.received(.released(podStatus), epoch: watch.epoch), now: t0 + 604) == [])
+        #expect(phone.isIdle)
+    }
+
+    @Test("ended watch session: a release for a session the phone never knew ends it") func unknownSessionReleased() {
+        var idle = UntetheredSession()
+        #expect(idle.phone(.watchSessionEnded(epoch: 5000), now: t0) == [.reconcile])
+        #expect(idle.isIdle)
+        #expect(idle.epoch == 5000)
+        #expect(idle.forced)
+        #expect(idle.phone(.watchRecordsSeen(epoch: 5000), now: t0 + 1) == [])
+
+        var checking = UntetheredSession()
+        _ = checking.phone(.foreignSessionDetected(podStatus), now: t0)
+        #expect(checking.phone(.watchSessionEnded(epoch: 5000), now: t0 + 1) == [.takePump, .reconcile])
+        #expect(checking.isIdle)
+        #expect(checking.epoch == 5000)
+    }
+
+    @Test("records of a session the phone never knew: the watch is asked, not taken at its records")
+    func unknownSessionRecordsAsk() {
+        var watch = UntetheredSession()
+        _ = watch.watch(.startWithoutPhone, now: t0)
+        _ = watch.watch(.takeoverSucceeded(podStatus), now: t0 + 30)
+        var phone = UntetheredSession()
+        #expect(phone.phone(.watchRecordsSeen(epoch: watch.epoch), now: t0 + 60) == [.send(.statusQuery)])
+        #expect(!phone.isIdle)
+        #expect(phone.isCheckingForeignSession)
+        // the watch holds the pump: the phone stands aside
+        var holding = phone
+        #expect(holding.phone(.watchHoldsPump(epoch: watch.epoch, status: podStatus), now: t0 + 61) == [.releasePump])
+        #expect(holding.phase == .active)
+        // it doesn't: the session is over
+        var notHolding = phone
+        #expect(notHolding.phone(.watchHoldsPump(epoch: watch.epoch, status: nil), now: t0 + 61) == [.takePump, .reconcile])
+        #expect(notHolding.isIdle)
+        #expect(notHolding.epoch == watch.epoch)
+    }
+
     @Test("without phone: a pod out of reach for five minutes ends the start") func startWithoutPhoneTimeout() {
         var watch = UntetheredSession()
         _ = watch.watch(.startWithoutPhone, now: t0)

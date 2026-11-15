@@ -170,9 +170,11 @@ import Testing
         #expect(newerHolding.epoch == epoch + 1)
         #expect(newerHolding.startedWithoutPhone)
 
+        // "not holding" for a session the phone never knew: that session is over, the phone takes its number
         var newerNotHolding = phone
-        #expect(newerNotHolding.phone(.watchHoldsPump(epoch: epoch + 1, status: nil), now: t0 + 5) == [.takePump])
+        #expect(newerNotHolding.phone(.watchHoldsPump(epoch: epoch + 1, status: nil), now: t0 + 5) == [.takePump, .reconcile])
         #expect(newerNotHolding.isIdle)
+        #expect(newerNotHolding.epoch == epoch + 1)
     }
 
     @Test("revoke: a watch that never took the pump has nothing to release")
