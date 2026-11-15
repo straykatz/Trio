@@ -164,6 +164,8 @@ import WatchKit
     var isActive: Bool { data.session.phase == .active || data.session.phase == .ending }
 
     private init() {
+        // every stored property is set before a method of self runs: Swift refuses `adoptSavedState()` first
+        data = store.data
         adoptSavedState()
     }
 
