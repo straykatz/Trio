@@ -1524,10 +1524,10 @@ import WatchKit
             title: String(localized: "Handing Back to iPhone"),
             body: reason == .podStall
                 ? String(
-                    localized: "The watch hasn't reached the pod for \(minutes) minutes. The iPhone takes the pump back as soon as it gets the request; keep it nearby."
+                    localized: "The watch hasn't reached the pod for \(minutes) minutes. The iPhone takes the pump back as soon as it gets the request; keep it nearby. Bolus on the iPhone; the watch takes boluses again in 5 minutes if the iPhone hasn't taken the pump."
                 )
                 : String(
-                    localized: "The watch has had no sensor reading and no loop for \(minutes) minutes. The iPhone takes the pump back as soon as it gets the request; keep it nearby."
+                    localized: "The watch has had no sensor reading and no loop for \(minutes) minutes. The iPhone takes the pump back as soon as it gets the request; keep it nearby. Bolus on the iPhone; the watch takes boluses again in 5 minutes if the iPhone hasn't taken the pump."
                 )
         )
         send(.handbackRequested(minutesWithoutLoop: minutes), epoch: data.session.epoch, queueing: true)

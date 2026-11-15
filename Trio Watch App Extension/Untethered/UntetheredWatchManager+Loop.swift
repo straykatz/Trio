@@ -513,7 +513,17 @@ extension UntetheredWatchManager {
         // the phone is taking the pump back (the watch leaves the pod to it), or the hand-back is in its last stage:
         // a bolus now would take the pod's one connection the phone needs, as the loop's own check `mayDose` knows
         // (Ponytail's review, 15 November). Remote boluses come this way too.
-        let handingBack = String(localized: "The pump is being handed to the iPhone. Bolus from the iPhone once it has the pump.")
+        // with the time it ends: the iPhone may never have got the request (away, or the watch asked because the
+        // sensor, not the pod, stopped), and then the watch takes boluses again after it
+        var handingBack: String {
+            guard let until = podQuietUntil, until > Date() else {
+                return String(localized: "The pump is being handed to the iPhone. Bolus from the iPhone once it has the pump.")
+            }
+            let time = until.formatted(date: .omitted, time: .shortened)
+            return String(
+                localized: "The watch leaves the pod to the iPhone until \(time). Bolus on the iPhone, or on the watch after \(time)."
+            )
+        }
         if (podQuietUntil ?? .distantPast) > Date() {
             log("not delivered: \(handingBack)")
             notifyBolus(units, delivered: false, message: handingBack, source: source)
