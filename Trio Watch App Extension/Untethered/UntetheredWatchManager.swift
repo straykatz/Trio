@@ -113,6 +113,11 @@ import WatchKit
     @ObservationIgnored var handbackRequestedAt: Date?
     /// How many Pod Not Reachable notices this stall has brought; from the second on the watch vibrates harder.
     @ObservationIgnored var podLinkNoticeCount = 0
+    /// When this stall's early notice asked to open Trio on the watch (`checkPodLinkEarly`); nil once a loop gets through.
+    @ObservationIgnored var podLinkEarlyNoticeAt: Date?
+    /// The pod tried with Trio in front after that notice: waiting for a loop in flight, or running.
+    @ObservationIgnored var podFrontTry: PodFrontTry?
+    enum PodFrontTry { case pending, running }
     /// When loops failed at the pod's link (the pod dropped it, or wasn't reached): two since the last loop shorten
     /// the wait before the pump goes back to the phone (`podLinkDropLimit`).
     @ObservationIgnored var podLinkFailures: [Date] = []
@@ -939,6 +944,9 @@ import WatchKit
         lastPodLinkNotice = nil
         lastPodLinkReset = nil
         podLinkNoticeCount = 0
+        podLinkEarlyNoticeAt = nil
+        podFrontTry = nil
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [Self.podLinkEarlyID])
         // the pump is back: "Watch Took Over" isn't asked again (`ActionNotice`)
         UNUserNotificationCenter.current().removePendingNotificationRequests(
             withIdentifiers: ActionNotice.reminderDelays.indices.map { Self.tookOverID + ".again\($0 + 1)" }

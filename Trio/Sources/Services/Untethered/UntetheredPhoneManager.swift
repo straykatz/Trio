@@ -6,6 +6,7 @@ import LoopKit
 import OmnipodKit
 import Swinject
 import UIKit
+import UserNotifications
 import WatchConnectivity
 
 /// Read by the loop, bolus and watch paths without resolving any service, so a relaunch holds
@@ -630,6 +631,19 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         await apply(.forceTakeBack)
     }
 
+    /// The phone took the pump back because the watch couldn't reach the pod.
+    private func notifyPumpBackFromStalledWatch(minutes: Int) {
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "Pump Back on iPhone")
+        content.body = String(
+            localized: "The watch couldn't reach the pod for \(minutes) minutes, so the iPhone took the pump back. Start untethered mode again when you want."
+        )
+        content.sound = .default
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "untethered.pumpBackFromWatch", content: content, trigger: nil)
+        )
+    }
+
     /// The iPhone's Bluetooth is off, as in flight mode: no pod is in reach.
     @MainActor var isBluetoothOff: Bool {
         apsManager.bluetoothManager?.bluetoothState == .poweredOff
@@ -779,6 +793,8 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
                 try? await Task.sleep(nanoseconds: UInt64(Self.handbackRequestRetryDelay * 1_000_000_000))
                 guard self.state.session.phase == .active, envelope.epoch == self.state.session.epoch else { break }
             }
+            // the watch's own notice may have gone unseen: the phone says it has the pump (15 November, 19:56 and 20:26)
+            if minutes > 0, self.state.session.isIdle { self.notifyPumpBackFromStalledWatch(minutes: minutes) }
         case let .remoteTreatmentResult(id, delivered, message):
             replyHandler?([:])
             self.answerRemoteTreatment(id, delivered ? .delivered(message) : .refused(message))
