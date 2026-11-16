@@ -9,6 +9,8 @@ struct UntetheredPhoneState: Codable, Equatable {
     var podEndedOnWatch = false
     /// Per epoch, the latest version of each record already stored.
     var applied: [Int: [String: UntetheredSyncEntry]] = [:]
+    /// The newest session whose history is complete on the phone; nil in a file from before it was kept.
+    var syncedEpoch: Int?
     /// Per epoch, the sync identifiers of doses the watch last reported as still running. Only the watch's pump
     /// manager can finalize them, so the phone's own pending reports must not purge them.
     var watchPendingDoses: [Int: Set<String>] = [:]
@@ -25,6 +27,18 @@ struct UntetheredPhoneState: Codable, Equatable {
     var lastError: String?
 
     var watchPendingDoseIdentifiers: Set<String> { watchPendingDoses.values.reduce(into: []) { $0.formUnion($1) } }
+
+    /// Whether the watch's records of a session are stored: true for one whose history is open, or for an ended one
+    /// the phone never synced; false (confirmed unstored) for one already complete; nil (not confirmed, sent again)
+    /// for a session newer than the phone's. A start the phone gave up on ends with its history never opened: the
+    /// watch may still have dosed in it, and its records were confirmed unstored, so the watch deleted them.
+    func storesRecords(epoch: Int) -> Bool? {
+        if applied[epoch] != nil || (epoch == session.epoch && !session.isIdle) { return true }
+        guard epoch <= session.epoch else { return nil }
+        // a file from before syncedEpoch was kept: as before, a late copy of a finished session
+        guard let syncedEpoch else { return false }
+        return epoch > syncedEpoch
+    }
 }
 
 /// A time the watch had the pump: from its takeover until it let go, open while it still has it.
@@ -45,6 +59,7 @@ extension UntetheredPhoneState {
         pumpReturnPending = try container.decodeIfPresent(Bool.self, forKey: .pumpReturnPending) ?? defaults.pumpReturnPending
         podEndedOnWatch = try container.decodeIfPresent(Bool.self, forKey: .podEndedOnWatch) ?? defaults.podEndedOnWatch
         applied = try container.decodeIfPresent([Int: [String: UntetheredSyncEntry]].self, forKey: .applied) ?? defaults.applied
+        syncedEpoch = try container.decodeIfPresent(Int.self, forKey: .syncedEpoch)
         watchPendingDoses = try container.decodeIfPresent([Int: Set<String>].self, forKey: .watchPendingDoses)
             ?? defaults.watchPendingDoses
         audit = try container.decodeIfPresent(UntetheredAuditPoint.self, forKey: .audit)

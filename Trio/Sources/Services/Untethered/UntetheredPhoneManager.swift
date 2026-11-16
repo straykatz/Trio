@@ -1830,12 +1830,14 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
     @MainActor private func ingest(_ records: [UntetheredRecord], epoch: Int) async -> [UUID] {
         // a session whose history is complete takes nothing more: a late copy (a queued transfer, a resend after a
         // relaunch) would store its carbs and doses a second time. Confirmed, so the watch lets go of it.
-        let session = state.session
-        guard state.applied[epoch] != nil || (epoch == session.epoch && !session.isIdle) else {
-            // a newer session's records aren't confirmed: the watch sends them again once the phone follows it
-            guard epoch <= session.epoch else { return [] }
+        switch state.storesRecords(epoch: epoch) {
+        case true?: break
+        case false?:
             debug(.watch, "Untethered: \(records.count) record(s) of finished session \(epoch) ignored")
             return records.map(\.id)
+        case nil:
+            // a newer session's records aren't confirmed: the watch sends them again once the phone follows it
+            return []
         }
         var applied = state.applied[epoch] ?? [:]
         // the Apple Watch update waits until the batch is in: one per stored reading slowed the history to a crawl
@@ -2184,7 +2186,10 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
 
     @MainActor private func finishSync(epoch: Int) async {
         await freezeWatchDoses(epoch: epoch)
-        UntetheredGate.update { $0.applied[epoch] = nil }
+        UntetheredGate.update {
+            $0.applied[epoch] = nil
+            $0.syncedEpoch = max($0.syncedEpoch ?? epoch, epoch)
+        }
         publish()
         debug(.watch, "Untethered: history of session \(epoch) complete")
         // a return audited before the history was complete is judged again; one still reading the pump does it itself

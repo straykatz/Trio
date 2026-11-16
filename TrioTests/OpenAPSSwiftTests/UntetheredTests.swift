@@ -685,6 +685,24 @@ import Testing
         #expect(UntetheredSensorWindow.end(now: reading, lastReading: nil) == nil)
     }
 
+    @Test("records: a session the phone gave up on keeps its history; a complete one isn't stored twice") func recordsOfEndedSessions() throws {
+        // a start the phone gave up on: idle, its history never opened
+        var state = UntetheredPhoneState()
+        _ = state.session.phone(.start(grant()), now: t0)
+        _ = state.session.phone(.tick, now: t0 + UntetheredSession.prepareTimeout + 1)
+        let epoch = state.session.epoch
+        #expect(state.session.isIdle)
+        #expect(state.storesRecords(epoch: epoch) == false, "a file from before syncedEpoch: as before")
+        state.syncedEpoch = epoch - 1
+        #expect(state.storesRecords(epoch: epoch) == true, "the watch may have dosed in it: stored")
+        #expect(state.storesRecords(epoch: epoch - 1) == false, "complete already: a late copy isn't stored twice")
+        #expect(state.storesRecords(epoch: epoch + 1) == nil, "newer than the phone's: sent again later")
+        state.applied[epoch - 2] = [:]
+        #expect(state.storesRecords(epoch: epoch - 2) == true, "history still open")
+        let decoded = try JSONDecoder().decode(UntetheredPhoneState.self, from: JSONEncoder().encode(state))
+        #expect(decoded.syncedEpoch == epoch - 1)
+    }
+
     @Test("audit: a return's point survives a relaunch until the complete history judges it") func auditPointPersistence() throws {
         var state = UntetheredPhoneState()
         state.audit = UntetheredAuditPoint(epoch: 7, start: t0, startUnits: 10, end: t0.addingTimeInterval(3600), endUnits: 11.5)
