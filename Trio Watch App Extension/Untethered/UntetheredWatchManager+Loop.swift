@@ -79,10 +79,13 @@ extension UntetheredWatchManager {
             }
             // the pod read is a pod command too: none without background time left (see `enact`)
             var explained = true
+            var podReached = true
             if enacts, !self.loopHoldExpired {
-                _ = await withCheckedContinuation { (continuation: CheckedContinuation<Date?, Never>) in
+                let synced = await withCheckedContinuation { (continuation: CheckedContinuation<Date?, Never>) in
                     pump.ensureCurrentPumpData { continuation.resume(returning: $0) }
                 }
+                // pod data older than the kit's own 6 minutes: the pod didn't answer this loop
+                podReached = synced.map { Date().timeIntervalSince($0) <= 6 * 60 } ?? false
                 // before the determination, so its IOB counts what the records miss
                 explained = self.podTotalExplained(pump, grant: grant)
             }
@@ -142,6 +145,9 @@ extension UntetheredWatchManager {
                 }
                 if enacts {
                     do {
+                        // a loop that didn't reach the pod isn't one, also when it had nothing to send: such loops
+                        // counted as done and kept the stall from being noticed (15 November, 22:41 to 23:06)
+                        guard podReached else { throw UntetheredWatchError.podNotConnected }
                         // A selection made while this determination was running invalidates its old permissions.
                         guard self.data.grant?.dosingMode == grant.dosingMode else {
                             record(enactedAt: nil)
@@ -403,6 +409,7 @@ enum UntetheredWatchError: LocalizedError {
     case notEnoughGlucose
     case staleGlucose
     case noBackgroundTime
+    case podNotConnected
 
     var errorDescription: String? {
         switch self {
@@ -411,6 +418,7 @@ enum UntetheredWatchError: LocalizedError {
         case .noDetermination: return String(localized: "The algorithm gave no result.")
         case .noPump: return String(localized: "The watch doesn't have the pump.")
         case .noBackgroundTime: return String(localized: "watchOS gave the watch no background time for the pump.")
+        case .podNotConnected: return String(localized: "The watch couldn't reach the pod.")
         }
     }
 }
