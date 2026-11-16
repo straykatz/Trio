@@ -74,17 +74,17 @@ struct WatchConfigAppleWatchView: BaseView {
                     get: { selectedVerboseHint },
                     set: {
                         selectedVerboseHint = $0.map { AnyView($0) }
-                        hintLabel = String(localized: "Untethered Mode")
+                        hintLabel = String(localized: "Watch Mode")
                     }
                 ),
                 units: state.units,
                 type: .boolean,
-                label: String(localized: "Untethered Mode"),
+                label: String(localized: "Watch Mode"),
                 miniHint: String(localized: "Let the watch run the loop with its own pump and CGM connection"),
                 verboseHint: Text(
-                    "When this is off, neither the iPhone nor the watch starts untethered mode, the watch hides its status page and the iPhone sends it no copy to start without it. A session still running hands back."
+                    "When this is off, neither the iPhone nor the watch starts watch mode, the watch hides its status page and the iPhone sends it no copy to start without it. A session still running hands back."
                 ),
-                headerText: String(localized: "Untethered Mode")
+                headerText: String(localized: "Watch Mode")
             )
 
             if state.untetheredModeWatch {
@@ -102,9 +102,9 @@ struct WatchConfigAppleWatchView: BaseView {
                     units: state.units,
                     type: .boolean,
                     label: String(localized: "Allow Start Without iPhone"),
-                    miniHint: String(localized: "Let the watch start untethered mode while the iPhone is unavailable"),
+                    miniHint: String(localized: "Let the watch start watch mode while the iPhone is unavailable"),
                     verboseHint: Text(
-                        "For when you leave without starting untethered mode. While this is on, the phone keeps a copy of your settings, carbs and doses on the watch, renewed at least every 30 minutes. With the iPhone out of reach, and that copy younger than your insulin's action time, the watch offers Start Without Phone on its untethered page; it never starts by itself. The watch first books insulin the pod delivered that the copy doesn't know of, and the phone stops dosing as soon as it hears from the watch. When this is off, the phone sends no copy and the watch hides the button."
+                        "For when you leave without starting watch mode. While this is on, the phone keeps a copy of your settings, carbs and doses on the watch, renewed at least every 30 minutes. With the iPhone out of reach, and that copy younger than your insulin's action time, the watch offers Start Without Phone on its watch mode page; it never starts by itself. The watch first books insulin the pod delivered that the copy doesn't know of, and the phone stops dosing as soon as it hears from the watch. When this is off, the phone sends no copy and the watch hides the button."
                     ),
                     headerText: nil
                 )
@@ -126,7 +126,7 @@ struct WatchConfigAppleWatchView: BaseView {
                         label: String(localized: "Start by Itself When iPhone Stops"),
                         miniHint: String(localized: "The watch takes over the loop when the iPhone is gone"),
                         verboseHint: Text(
-                            "Needs the Watch sensor switch on the watch (its own G7 reading). When the iPhone's newest reading the watch has is 10 minutes old, the watch looks at the pod, without dosing, and looks again at its next reading, about 5 minutes later. Only if nobody used the pod in between, and the iPhone's copy was at most an hour old when it went silent, does the watch start untethered mode by itself from the iPhone's copy, as Start Without Phone does, about 15 minutes after the iPhone's last reading; right before its first dose it checks once more that the iPhone hasn't used the pod since. If a look shows the iPhone used the pod, the watch doesn't look again for about 10 minutes unless it hears from the iPhone, because the iPhone pauses its dosing briefly after each look. When the iPhone is back in reach for a minute, the watch hands the pump back by itself, and it lets go at once if the pod shows the iPhone has used it. Idea and design by Elias Maurer."
+                            "Needs the Watch sensor switch on the watch (its own G7 reading). When the iPhone's newest reading the watch has is 10 minutes old, the watch looks at the pod, without dosing, and looks again at its next reading, about 5 minutes later. Only if nobody used the pod in between, and the iPhone's copy was at most an hour old when it went silent, does the watch start watch mode by itself from the iPhone's copy, as Start Without Phone does, about 15 minutes after the iPhone's last reading; right before its first dose it checks once more that the iPhone hasn't used the pod since. If a look shows the iPhone used the pod, the watch doesn't look again for about 10 minutes unless it hears from the iPhone, because the iPhone pauses its dosing briefly after each look. When the iPhone is back in reach for a minute, the watch hands the pump back by itself, and it lets go at once if the pod shows the iPhone has used it. Idea and design by Elias Maurer."
                         ),
                         headerText: nil
                     )
@@ -148,7 +148,7 @@ struct WatchConfigAppleWatchView: BaseView {
                     label: String(localized: "Upload to Nightscout From the Watch"),
                     miniHint: String(localized: "While the watch loops without the iPhone, it uploads readings and loops itself"),
                     verboseHint: Text(
-                        "Needs Nightscout upload on. While untethered mode runs and the iPhone is out of reach, the watch uploads its glucose readings and each loop's status (IOB, forecast, what it enacted) to Nightscout itself, so followers see them as they happen. A watch without cellular uploads only on a Wi-Fi network it knows; without one, nothing goes up until the iPhone takes the session's history after the hand-back, as when this is off. The iPhone passes the watch your Nightscout address and the API secret in the hashed form Nightscout's upload takes. Boluses and temp basals still come from the iPhone after the hand-back."
+                        "Needs Nightscout upload on. While watch mode runs and the iPhone is out of reach, the watch uploads its glucose readings and each loop's status (IOB, forecast, what it enacted) to Nightscout itself, so followers see them as they happen. A watch without cellular uploads only on a Wi-Fi network it knows; without one, nothing goes up until the iPhone takes the session's history after the hand-back, as when this is off. The iPhone passes the watch your Nightscout address and the API secret in the hashed form Nightscout's upload takes. Boluses and temp basals still come from the iPhone after the hand-back."
                     ),
                     headerText: nil
                 )
@@ -162,18 +162,18 @@ struct WatchConfigAppleWatchView: BaseView {
                         get: { selectedVerboseHint },
                         set: {
                             selectedVerboseHint = $0.map { AnyView($0) }
-                            hintLabel = String(localized: "Extended Untethered Mode")
+                            hintLabel = String(localized: "Extended Watch Mode")
                         }
                     ),
                     units: state.units,
                     type: .boolean,
-                    label: String(localized: "Extended Untethered Mode"),
+                    label: String(localized: "Extended Watch Mode"),
                     miniHint: String(
-                        localized: "More stable untethered mode: a workout keeps Trio running on the watch, at a clear battery cost."
+                        localized: "More stable watch mode: a workout keeps Trio running on the watch, at a clear battery cost."
                     ),
                     verboseHint: VStack(alignment: .leading, spacing: 8) {
                         Text(
-                            "When this is on, the watch runs a workout with each untethered session, from the start to the hand-back. watchOS doesn't suspend an app with a running workout, so Trio stays awake between sensor readings: fewer readings and loops are missed, and its own checks keep running."
+                            "When this is on, the watch runs a workout with each watch mode session, from the start to the hand-back. watchOS doesn't suspend an app with a running workout, so Trio stays awake between sensor readings: fewer readings and loops are missed, and its own checks keep running."
                         )
                         Text(
                             "The workout is discarded at the end, so it isn't saved as a workout in the Fitness app. While it runs, the watch still counts it toward the Activity rings, the Exercise minutes in particular, as with any workout. It collects only the heart rate, for the minimal screen. The first start asks on the watch for permission to use workouts and read the heart rate."
@@ -188,7 +188,7 @@ struct WatchConfigAppleWatchView: BaseView {
                         .padding(.leading, 12)
                         Text("• The heart rate sensor runs the whole time: the watch battery drains noticeably faster.")
                         Text(
-                            "• Ending the workout on the watch stops the keeping awake until the next untethered session. Untethered mode itself goes on."
+                            "• Ending the workout on the watch stops the keeping awake until the next watch mode session. Watch mode itself goes on."
                         )
                     },
                     headerText: nil
@@ -226,7 +226,7 @@ struct WatchConfigAppleWatchView: BaseView {
                     label: String(localized: "Tint Home Screen While Watch Loops"),
                     miniHint: String(localized: "Color the whole home screen while the watch has the pump"),
                     verboseHint: Text(
-                        "While the watch runs the loop, the home screen's background takes the untethered color, so you see at a glance that the phone doesn't dose. When this is off, only the bar at the bottom shows it."
+                        "While the watch runs the loop, the home screen's background takes the watch mode color, so you see at a glance that the phone doesn't dose. When this is off, only the bar at the bottom shows it."
                     ),
                     headerText: nil
                 )

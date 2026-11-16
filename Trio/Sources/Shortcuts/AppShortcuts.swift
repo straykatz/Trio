@@ -69,10 +69,10 @@ struct AppShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: StartUntetheredIntent(),
             phrases: [
-                "Start \(.applicationName) untethered mode",
+                "Start \(.applicationName) watch mode",
                 "Hand the pump to the watch in \(.applicationName)"
             ],
-            shortTitle: "Start Untethered",
+            shortTitle: "Start Watch Mode",
             // not "applewatch": App Store Connect refuses "apple" in App Intent metadata
             systemImageName: "figure.run"
         )

@@ -308,7 +308,7 @@ struct UntetheredSession: Codable, Equatable {
             return [.send(.prepared)]
 
         case (_, .received(.prepare, _)):
-            return [.send(.rejected(reason: String(localized: "The watch is still running an earlier untethered session.")))]
+            return [.send(.rejected(reason: String(localized: "The watch is still running an earlier watch mode session.")))]
 
         case (.idle, .startWithoutPhone):
             // seconds since 1970, as the phone's: newer than any session it granted

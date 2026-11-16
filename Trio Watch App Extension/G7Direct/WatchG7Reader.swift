@@ -256,14 +256,14 @@ import WatchKit
         }
         if isStandingAside {
             return String(
-                localized: "Paused: untethered mode reads the sensor",
-                comment: "Watch G7 status: untethered mode holds the sensor"
+                localized: "Paused: watch mode reads the sensor",
+                comment: "Watch G7 status: watch mode holds the sensor"
             )
         }
         if isReconnecting, !isConnected {
             return String(
                 localized: "Reconnecting to the sensor…",
-                comment: "Watch G7 status: pairing again after untethered mode"
+                comment: "Watch G7 status: pairing again after watch mode"
             )
         }
         if phoneUsesG7Direct == false, sensorName == nil {
@@ -390,7 +390,7 @@ import WatchKit
             if soon < delay {
                 delay = soon
                 content.body = String(
-                    localized: "The watch hasn't read the sensor since untethered mode ended. Open Trio on the watch: it reconnects there."
+                    localized: "The watch hasn't read the sensor since watch mode ended. Open Trio on the watch: it reconnects there."
                 )
             }
         }
@@ -422,7 +422,7 @@ import WatchKit
         isStandingAside = aside
         noteAside(aside)
         if aside {
-            appendLog("Paused: untethered mode has the sensor")
+            appendLog("Paused: watch mode has the sensor")
             // untethered mode books its own "No Sensor Readings"
             bookNoReadingsAlert()
             session?.pause()
@@ -447,14 +447,14 @@ import WatchKit
                 setPeripheralIdentifier(handle)
                 appendLog(
                     !isEnabled
-                        ? "Untethered mode over: the watch sensor is switched off, not reading"
+                        ? "Watch mode over: the watch sensor is switched off, not reading"
                         : handle == nil
-                        ? "Untethered mode over: reading again, searching for the sensor"
-                        : "Untethered mode over: reading again, connecting to the sensor it used"
+                        ? "Watch mode over: reading again, searching for the sensor"
+                        : "Watch mode over: reading again, connecting to the sensor it used"
                 )
                 session?.update(credentials: credentials)
             } else {
-                appendLog(isEnabled ? "Untethered mode over: reading again" : "Untethered mode over: the watch sensor is switched off, not reading")
+                appendLog(isEnabled ? "Watch mode over: reading again" : "Watch mode over: the watch sensor is switched off, not reading")
             }
             isReconnecting = true
             // the reminder below counts from here until the first reading of our own

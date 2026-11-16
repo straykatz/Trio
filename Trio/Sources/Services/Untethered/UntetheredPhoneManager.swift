@@ -636,7 +636,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         let content = UNMutableNotificationContent()
         content.title = String(localized: "Pump Back on iPhone")
         content.body = String(
-            localized: "The watch couldn't reach the pod for \(minutes) minutes, so the iPhone took the pump back. Start untethered mode again when you want."
+            localized: "The watch couldn't reach the pod for \(minutes) minutes, so the iPhone took the pump back. Start watch mode again when you want."
         )
         content.sound = .default
         UNUserNotificationCenter.current().add(
@@ -1184,7 +1184,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
 
     @MainActor private func preflight() throws {
         guard isEnabled else {
-            throw UntetheredError.unavailable(String(localized: "Untethered mode is off in Settings › Apple Watch."))
+            throw UntetheredError.unavailable(String(localized: "Watch mode is off in Settings › Apple Watch."))
         }
         guard WCSession.isSupported(), WCSession.default.isPaired, WCSession.default.isWatchAppInstalled else {
             throw UntetheredError.unavailable(String(localized: "Trio is not installed on a paired Apple Watch."))
@@ -1196,13 +1196,13 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         guard pump is ExclusiveDeviceControl, pump is PumpDeliveryOdometer else {
             throw UntetheredError.unavailable(
                 String(
-                    localized: "\(pump.localizedTitle) can't be handed to the watch. Untethered mode supports Omnipod DASH and Omnipod 5."
+                    localized: "\(pump.localizedTitle) can't be handed to the watch. Watch mode supports Omnipod DASH and Omnipod 5."
                 )
             )
         }
         guard let cgm = fetchGlucoseManager.cgmManager, cgm is DeviceConfigurationSharing else {
             throw UntetheredError.unavailable(
-                String(localized: "This CGM can't be read by the watch. Untethered mode supports Dexcom G7.")
+                String(localized: "This CGM can't be read by the watch. Watch mode supports Dexcom G7.")
             )
         }
         // the watch reads the same sensor; it links only around each reading, so its last contact proves nothing

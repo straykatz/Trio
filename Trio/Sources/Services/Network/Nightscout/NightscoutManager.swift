@@ -1410,7 +1410,7 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
             eventType: .nsUntethered,
             createdAt: start,
             enteredBy: NightscoutTreatment.local,
-            notes: String(localized: "Untethered on Apple Watch"),
+            notes: String(localized: "Watch mode on Apple Watch"),
             targetTop: nil,
             targetBottom: nil
         )

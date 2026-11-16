@@ -287,7 +287,7 @@ final class TrioWatchAppDelegate: NSObject, WKApplicationDelegate {
 
     static func handle(encrypted: String) async {
         guard let secret = RemoteSecretStore.load(), !secret.isEmpty else {
-            return log("no shared secret on the watch (remote control or untethered mode off on the iPhone)")
+            return log("no shared secret on the watch (remote control or watch mode off on the iPhone)")
         }
         guard let combined = Data(base64Encoded: encrypted) else { return log("unreadable") }
         let payload: Payload

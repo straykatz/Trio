@@ -24,8 +24,8 @@ struct WatchG7View: View {
                 if reader.isEnabled, reader.isStandingAside {
                     // the old value would only count up; untethered mode's readings are on the first pages
                     Text(
-                        "Untethered mode is reading the sensor. Its values are on the first pages.",
-                        comment: "Watch sensor page while untethered mode holds the sensor"
+                        "Watch mode is reading the sensor. Its values are on the first pages.",
+                        comment: "Watch sensor page while watch mode holds the sensor"
                     )
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -242,7 +242,7 @@ struct WatchG7DetailsView: View {
             "Sensor: \(reader.sensorName ?? "–")",
             "Paired: \(reader.hasWatchKey ? "yes" : "no") · connected: \(reader.isConnected ? "yes" : "no")",
             "Last 2 h: \(coverage.count)/\(coverage.expected) readings live, \(coverage.filledIn) filled in later, "
-                + "longest gap \(coverage.longestGapMinutes) min (untethered time left out)",
+                + "longest gap \(coverage.longestGapMinutes) min (watch mode time left out)",
             "Units: \(reader.units)"
         ]
         return (header + [""] + reader.logLines).joined(separator: "\n")

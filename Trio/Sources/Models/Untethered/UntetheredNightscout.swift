@@ -199,7 +199,7 @@ enum UntetheredNightscout {
             ))
         }
         if let sessionStart {
-            result.append(Treatment(eventType: sessionEventType, created_at: sessionStart, notes: "Untethered on Apple Watch"))
+            result.append(Treatment(eventType: sessionEventType, created_at: sessionStart, notes: "Watch mode on Apple Watch"))
         }
         // followers (LoopFollow, Nightscout) show the running override and temp target from these
         result += tempTargetTreatments(tempTargets, since: since, latest: latest)

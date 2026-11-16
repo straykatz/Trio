@@ -181,7 +181,7 @@ public final class G7WatchAcquisition: G7AcquisitionArm {
         // the session's silence is no reason to scan: the reader knows its sensor
         lastBootstrapAt = Date()
         linkedSinceTakeOver = false
-        freshLodge(id, why: "taking the sensor back from untethered mode")
+        freshLodge(id, why: "taking the sensor back from watch mode")
         let release = holdProcess(reason: "G7 takeover check", upTo: 42)
         queue.asyncAfter(deadline: .now() + 40) { [weak self] in
             defer { release() }

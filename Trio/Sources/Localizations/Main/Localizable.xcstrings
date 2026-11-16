@@ -172724,7 +172724,7 @@
     "Insulin doses will be increased by %@." : {
       "comment" : "Adjustment footer; the value is a percentage, e.g. 20%"
     },
-    "Insulin Check After Untethered Mode" : {
+    "Insulin Check After Watch Mode" : {
 
     },
     "Insulin Limit Reached" : {
@@ -270766,13 +270766,13 @@
     "Allow Start Without iPhone" : {
 
     },
-    "Untethered Mode" : {
+    "Watch Mode" : {
 
     },
-    "Let the watch start untethered mode while the iPhone is unavailable" : {
+    "Let the watch start watch mode while the iPhone is unavailable" : {
 
     },
-    "For when you leave without starting untethered mode. While this is on, the phone keeps a copy of your settings, carbs and doses on the watch, renewed at least every 30 minutes. With the iPhone out of reach, and that copy younger than your insulin's action time, the watch offers Start Without Phone on its untethered page; it never starts by itself. The watch first books insulin the pod delivered that the copy doesn't know of, and the phone stops dosing as soon as it hears from the watch. When this is off, the phone sends no copy and the watch hides the button." : {
+    "For when you leave without starting watch mode. While this is on, the phone keeps a copy of your settings, carbs and doses on the watch, renewed at least every 30 minutes. With the iPhone out of reach, and that copy younger than your insulin's action time, the watch offers Start Without Phone on its watch mode page; it never starts by itself. The watch first books insulin the pod delivered that the copy doesn't know of, and the phone stops dosing as soon as it hears from the watch. When this is off, the phone sends no copy and the watch hides the button." : {
 
     },
     "Show glucose on the app badge" : {
@@ -352091,7 +352091,7 @@
     "Small" : {
       "comment" : "Live Activity glucose reading font size"
     },
-    "%@ can't be handed to the watch. Untethered mode supports Omnipod DASH." : {
+    "%@ can't be handed to the watch. Watch mode supports Omnipod DASH." : {
 
     },
     "%lld entries on the way to the phone" : {
@@ -352121,10 +352121,10 @@
     "Emergency Stop" : {
 
     },
-    "End Untethered Mode" : {
+    "End Watch Mode" : {
 
     },
-    "End untethered mode?" : {
+    "End watch mode?" : {
 
     },
     "Enter carbs and boluses on the watch. They come back to the phone with the watch's history." : {
@@ -352199,13 +352199,10 @@
     "s" : {
       "comment" : "Alarm length in seconds"
     },
-    "Show Untethered Watch Button" : {
+    "Show Watch Mode Button" : {
 
     },
-    "Start Untethered" : {
-
-    },
-    "Start Untethered Watch Mode" : {
+    "Start Watch Mode" : {
 
     },
     "Start Without Phone" : {
@@ -352262,7 +352259,7 @@
     "The phone is still taking the pump back from the last session." : {
 
     },
-    "The phone must be reachable to start untethered mode." : {
+    "The phone must be reachable to start watch mode." : {
 
     },
     "The phone must be reachable to take the pump back. Use Emergency Stop if it isn't coming back." : {
@@ -352331,7 +352328,7 @@
     "The watch is not reachable. Open Trio on the watch and try again." : {
 
     },
-    "The watch is still running an earlier untethered session." : {
+    "The watch is still running an earlier watch mode session." : {
 
     },
     "The watch is still taking over the pump. Trio on the phone shows when it has." : {
@@ -352355,7 +352352,7 @@
     "This CGM can't be read by the watch yet." : {
 
     },
-    "This CGM can't be read by the watch. Untethered mode supports Dexcom G7." : {
+    "This CGM can't be read by the watch. Watch mode supports Dexcom G7." : {
 
     },
     "This pump can't be run by the watch yet." : {
@@ -352364,13 +352361,7 @@
     "Trio is not installed on a paired Apple Watch." : {
 
     },
-    "Untethered" : {
-
-    },
-    "Untethered on Apple Watch" : {
-
-    },
-    "Untethered Watch Mode" : {
+    "Watch mode on Apple Watch" : {
 
     },
     "Wait for the bolus to finish, or stop it, before handing back." : {
@@ -352382,7 +352373,7 @@
     "Waiting for the phone to take the pump" : {
 
     },
-    "While this override runs, a watch button next to its cancel button hands the loop to the Apple Watch. Untethered mode ends with the override." : {
+    "While this override runs, a watch button next to its cancel button hands the loop to the Apple Watch. Watch mode ends with the override." : {
 
     },
     "Hands back by itself once the phone is nearby." : {

@@ -443,13 +443,13 @@ import WatchKit
                 notify(
                     id: Self.notificationPrefix + "handbackRequest",
                     title: String(localized: "Pump Back on iPhone"),
-                    body: String(localized: "The iPhone has the pump again and loops. Start untethered mode again when you want.")
+                    body: String(localized: "The iPhone has the pump again and loops. Start watch mode again when you want.")
                 )
             } else {
                 notify(
                     id: Self.notificationPrefix + "phoneTookPod",
                     title: String(localized: "iPhone Took the Pump"),
-                    body: String(localized: "The iPhone ended untethered mode and doses again. Check that Trio on the iPhone loops.")
+                    body: String(localized: "The iPhone ended watch mode and doses again. Check that Trio on the iPhone loops.")
                 )
             }
 
@@ -1358,7 +1358,7 @@ import WatchKit
             return
         }
         guard WCSession.default.isReachable else {
-            setError(String(localized: "The phone must be reachable to start untethered mode."))
+            setError(String(localized: "The phone must be reachable to start watch mode."))
             return
         }
         setError(nil)
@@ -1575,7 +1575,7 @@ import WatchKit
         notify(
             id: Self.notificationPrefix + "phoneTookPod",
             title: String(localized: "iPhone Has the Pump"),
-            body: String(localized: "The iPhone has used the pod, so the watch stopped untethered mode. The iPhone loops again.")
+            body: String(localized: "The iPhone has used the pod, so the watch stopped watch mode. The iPhone loops again.")
         )
         apply(.emergencyStop(nil))
         return true

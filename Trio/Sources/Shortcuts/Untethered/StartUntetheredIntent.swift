@@ -4,7 +4,7 @@ import Foundation
 /// Starts untethered watch mode from Shortcuts or an automation, without opening Trio on the phone. Trio must be
 /// open on the watch: the phone can't wake it.
 struct StartUntetheredIntent: AppIntent {
-    static var title = LocalizedStringResource("Start Untethered Watch Mode")
+    static var title = LocalizedStringResource("Start Watch Mode")
 
     static var description = IntentDescription(.init(
         "Hands the pump and the CGM to the watch, which loops on its own until the pump is handed back. Trio must be open on the watch."

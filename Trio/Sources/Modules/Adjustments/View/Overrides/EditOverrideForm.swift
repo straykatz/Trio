@@ -259,11 +259,11 @@ struct EditOverrideForm: View {
             .listRowBackground(Color.chart)
 
             Section {
-                Toggle("Show Untethered Watch Button", isOn: $showUntetheredButton)
+                Toggle("Show Watch Mode Button", isOn: $showUntetheredButton)
                     .onChange(of: showUntetheredButton) { hasChanges = true }
             } footer: {
                 Text(
-                    "While this override runs, a watch button next to its cancel button hands the loop to the Apple Watch. Untethered mode ends with the override."
+                    "While this override runs, a watch button next to its cancel button hands the loop to the Apple Watch. Watch mode ends with the override."
                 )
             }
             .listRowBackground(Color.chart)

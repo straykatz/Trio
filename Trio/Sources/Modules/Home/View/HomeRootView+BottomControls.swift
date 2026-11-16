@@ -804,13 +804,13 @@ extension Home.RootView {
         case let .untetheredAudit(finding):
             panelBanner(
                 systemImage: "applewatch.slash",
-                title: String(localized: "Insulin Check After Untethered Mode"),
+                title: String(localized: "Insulin Check After Watch Mode"),
                 subtitle: String(localized: "Pump and records differ. Tap for details."),
                 tint: .orange
             ) {
                 showUntetheredAuditFinding = true
             }
-            .alert(String(localized: "Insulin Check After Untethered Mode"), isPresented: $showUntetheredAuditFinding) {
+            .alert(String(localized: "Insulin Check After Watch Mode"), isPresented: $showUntetheredAuditFinding) {
                 Button(String(localized: "OK"), role: .cancel) {
                     resolver.resolve(UntetheredPhoneManager.self)?.acknowledgeAuditFinding()
                 }
