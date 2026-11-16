@@ -39,7 +39,11 @@ After a hand-back the phone reads the pod, compares what the pod says it deliver
 
 ### Starting without the iPhone (optional, off by default)
 
-**Settings › Apple Watch › Allow Start Without iPhone** is for the day you leave without starting untethered mode. While it is on, the phone keeps a copy of your settings, carbs and doses on the watch, renewed at least every 30 minutes. If the iPhone is then out of reach (off, forgotten at home), the watch's untethered page offers **Start Without Phone**. The watch never starts by itself; you have to tap and confirm.
+**Settings › Apple Watch › Allow Start Without iPhone** is for the day you leave without starting untethered mode. While it is on, the phone keeps a copy of your settings, carbs and doses on the watch, renewed at least every 30 minutes. If the iPhone is then out of reach (off, forgotten at home), the watch's untethered page offers **Start Without Phone**, which you tap and confirm.
+
+**Start by Itself When iPhone Stops** (needs Allow Start Without iPhone, off by default) lets the watch start on its own: once the phone's newest reading is about 15 minutes old, the watch has read three of its own, and its looks at the pod over about 4 minutes found nobody using it. Once per outage. When the phone is back in reach for a minute, the watch hands back by itself.
+
+**Upload to Nightscout From the Watch** (off by default): while the watch loops without the phone, it uploads its readings and loops to Nightscout itself.
 
 The copy is only used while it is younger than your insulin's action time. The phone sends a fresh copy at once after every pump event, so a bolus reaches the watch within seconds. Anything the pod delivered after the copy that the copy doesn't know about is counted as a bolus before the watch's first loop; a bolus that was still running then is counted once, by both devices. When the phone comes back, it sees that the watch has the pod and stops dosing.
 
@@ -50,7 +54,7 @@ Turning the setting off deletes the copy on the watch and hides the button.
 ### Good to know
 
 - A sensor the watch has never read before has to be paired with the watch first. The last step is a Bluetooth pairing request that watchOS only shows while Trio is on the watch screen. When a pairing is due, the watch says so on its untethered page (or in a notification, if Trio isn't open), keeps Trio in front for up to 10 minutes once it is open, and vibrates as the request comes. Keep Trio open until the first glucose value shows. If the pairing didn't finish, the watch tells you at once and pairs again at the next reading.
-- If no loop gets through for 15 minutes while readings still arrive, the watch shows **Pod Not Reachable** and searches for the pod again. Opening Trio on the watch usually reconnects it.
+- If loops keep failing at the pod's link, the watch shows **Pod Link Lost** after about 5 minutes and asks you to open Trio on it, which tries the pod at once. If that fails too, or no loop gets through for 10–15 minutes, it asks the phone to take the pump back (the phone notifies when it did) and keeps trying the pod until then.
 - The watch's battery drains faster while it loops. The untethered page shows the battery and the log records it at the start and end.
 - This is new, experimental code. Test it while awake, with the phone nearby, and check insulin on board after each session.
 
