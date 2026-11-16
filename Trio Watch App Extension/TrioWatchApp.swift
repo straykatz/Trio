@@ -20,6 +20,8 @@ import WatchKit
             TrioMainWatchView()
         }
         .onChange(of: scenePhase) { _, newScenePhase in
+            // the phone's state applies at once in the background (before suspension), debounced in front
+            WatchState.shared.setAppActive(newScenePhase == .active)
             // wrist down (inactive) or another app (background): either can freeze the app next
             if newScenePhase != .active {
                 UntetheredWatchManager.shared.appLeavingScreen()
@@ -43,6 +45,8 @@ import WatchKit
                 UntetheredWatchManager.shared.recheckCGM()
                 // what loops in the background did, without waiting for the phone link
                 UntetheredWatchManager.shared.refresh()
+                // the phone's newest state, if the one shown is old
+                WatchState.shared.refreshIfNeeded()
             }
         }
     }
