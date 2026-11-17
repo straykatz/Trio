@@ -873,29 +873,34 @@ struct UntetheredGlanceView: View {
         // A button over the whole screen rather than a tap gesture on the stack: on 25 October taps on the minimal
         // screen did nothing, and the hand-back had to come from the phone. A long press opens it too, and the hint
         // at the bottom says how.
-        Button(action: open) {
-            TimelineView(.periodic(from: .now, by: 30)) { context in
-                VStack(spacing: 4) {
-                    row(0, now: context.date)
-                    middle(now: context.date)
-                        .frame(maxHeight: .infinity)
-                    row(1, now: context.date)
-                    if !isLuminanceReduced {
-                        Text("Tap for Trio", comment: "Hint at the bottom of Extended Watch Mode's minimal screen")
-                            .font(.system(size: 10))
-                            .foregroundStyle(Self.dim)
+        // The button sized its content to fit, not to the screen: the middle got no more than its smallest size, and
+        // the chart showed as a flat strip with a third of the screen empty below (17 November, screenshot). The
+        // screen's size, given outright, lets the middle take the room left.
+        GeometryReader { screen in
+            Button(action: open) {
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    VStack(spacing: 4) {
+                        row(0, now: context.date)
+                        middle(now: context.date)
+                            .frame(maxHeight: .infinity)
+                        row(1, now: context.date)
+                        if !isLuminanceReduced {
+                            Text("Tap for Trio", comment: "Hint at the bottom of Extended Watch Mode's minimal screen")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Self.dim)
+                        }
                     }
+                    .padding(.horizontal, 6)
+                    .padding(.bottom, 2)
                 }
-                .padding(.horizontal, 6)
-                .padding(.bottom, 2)
+                .frame(width: screen.size.width, height: screen.size.height)
+                .background(Color.black)
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .simultaneousGesture(LongPressGesture(minimumDuration: 0.4).onEnded { _ in open() })
+            .opacity(isLuminanceReduced ? 0.75 : 1)
         }
-        .buttonStyle(.plain)
-        .simultaneousGesture(LongPressGesture(minimumDuration: 0.4).onEnded { _ in open() })
-        .opacity(isLuminanceReduced ? 0.75 : 1)
     }
 
     private func open() {
