@@ -378,7 +378,9 @@ public final class G7WatchAcquisition: G7AcquisitionArm {
         let release = holdProcess(reason: "G7 fresh connect", upTo: delay + 2)
         queue.asyncAfter(deadline: .now() + delay) { [weak self] in
             defer { release() }
-            guard let self, !self.lodged,
+            // Trio: not for a sensor forgotten meanwhile (16 November, 19:05: the old sensor, asked for again in the
+            // second the phone named a new one, connected 9 minutes later)
+            guard let self, !self.lodged, self.manager.activePeripheralIdentifier == id,
                   let p = self.central.retrievePeripherals(withIdentifiers: [id]).first else { return }
             switch p.state {
             case .disconnected:

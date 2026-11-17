@@ -1073,6 +1073,8 @@ import WatchKit
             || line.contains("Pairing: running the key exchange")
         {
             keepInFrontForPairing()
+        } else if line.hasPrefix("Pairing waits for Trio in front") {
+            askToOpenForPairing()
         } else if line.contains("expect the system pairing prompt") {
             // the wrist feels the request coming only when it can show: behind the watch face the notice buzzes
             // instead (6 November, 19:16: a haptic with only the watch face to see)

@@ -44,6 +44,8 @@ final class WatchG7Session: G7BluetoothManagerDelegate {
 
     private let lockedCredentials: Locked<WatchG7Credentials>
     private let lockedIsActive = Locked(true)
+    /// Trio on the screen: a pairing runs only then, as the system's pairing request can't show behind the watch face.
+    private let lockedIsInFront = Locked(false)
 
     // Confined to `bluetoothManager.managerQueue`.
     private var activationDate: Date?
@@ -131,15 +133,23 @@ final class WatchG7Session: G7BluetoothManagerDelegate {
     }
 
     /// The app's scene phase, for the acquisition: in front it holds in the app, behind it hands the wait to the daemon.
-    func appBecameActive() { bluetoothManager.appBecameActive() }
+    func appBecameActive() {
+        lockedIsInFront.value = true
+        bluetoothManager.appBecameActive()
+    }
+
     func appLeavingScreen() {
+        lockedIsInFront.value = false
         // paused (untethered mode has the sensor): the acquisition still learns it is behind, or it would hold in
         // the app and scan as if in front once it resumes (22 October, 01:15 to 04:54: no reading)
         guard lockedIsActive.value else { return bluetoothManager.appNoteBackground() }
         bluetoothManager.appLeavingScreen()
     }
 
-    func appNoteBackground() { bluetoothManager.appNoteBackground() }
+    func appNoteBackground() {
+        lockedIsInFront.value = false
+        bluetoothManager.appNoteBackground()
+    }
 
     /// New credentials from the phone, or a reset. Drops the link so the next
     /// connection uses them.
@@ -190,6 +200,13 @@ final class WatchG7Session: G7BluetoothManagerDelegate {
         let credentials = lockedCredentials.value
         guard credentials.canAuthenticate else {
             report("Not authenticating: no pairing code from the phone yet")
+            return
+        }
+        // Behind the watch face the key exchange ran to the end, the system's pairing request couldn't show, and the
+        // sensor refused the key at its next connection: four hours of that on 16 November (18:12 to 01:29), paired
+        // within a minute once Trio was in front. Pairs at the sensor's next connection with Trio in front.
+        guard credentials.sharedKey != nil || lockedIsInFront.value else {
+            report("Pairing waits for Trio in front")
             return
         }
 
