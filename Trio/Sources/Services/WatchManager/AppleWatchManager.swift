@@ -245,7 +245,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
             let tempTargetPresetObjects: [TempTargetStored] = try await CoreDataStack.shared
                 .getNSManagedObject(with: tempTargetPresetIds, context: context)
 
-            let watchState: WatchState = await context.perform {
+            let built: WatchState = await context.perform {
                 var watchState = WatchState(date: Date())
                 watchState.snoozeUntilDate = UserDefaults.standard
                     .object(forKey: "UserNotificationsManager.snoozeUntilDate") as? Date ?? .distantPast
@@ -464,7 +464,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
                 return watchState
             }
 
-            return watchState
+            return built
         } catch {
             warning(.watch, "Building watch state failed", error: error)
             return nil
@@ -855,7 +855,6 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
         message[WatchMessageKeys.chartIobCob] = treatments.iobCob
 
         return message
-        }
     }
 
     func sendAcknowledgment(toWatch success: Bool, message: String = "", ackCode: AcknowledgmentCode) {
