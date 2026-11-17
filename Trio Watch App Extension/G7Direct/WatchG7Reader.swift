@@ -159,10 +159,12 @@ import WatchKit
 
     private func noteAside(_ aside: Bool) {
         let now = Date().timeIntervalSince1970
+        // one open stretch at a time: a second start while one is open used to leave the first open for good
+        let isOpen = { (span: [TimeInterval]) in span.count == 2 && span[1] == 0 }
         if aside {
-            asideSpans.append([now, 0])
-        } else if let last = asideSpans.indices.last, asideSpans[last].count == 2, asideSpans[last][1] == 0 {
-            asideSpans[last][1] = now
+            if !asideSpans.contains(where: isOpen) { asideSpans.append([now, 0]) }
+        } else {
+            for index in asideSpans.indices where isOpen(asideSpans[index]) { asideSpans[index][1] = now }
         }
         let cutoff = now - 2 * 3600
         asideSpans.removeAll { $0.count != 2 || ($0[1] != 0 && $0[1] < cutoff) }
@@ -242,7 +244,13 @@ import WatchKit
             previous = max(previous, to)
         }
         longest = max(longest, now.timeIntervalSince(previous))
-        let asideTotal = spans.reduce(0) { $0 + $1.1.timeIntervalSince($1.0) }
+        // overlapping stretches count once, so the expected count can't go below zero ("0/-24")
+        var asideTotal: TimeInterval = 0
+        var coveredTo = start
+        for (from, to) in spans.sorted(by: { $0.0 < $1.0 }) where to > max(from, coveredTo) {
+            asideTotal += to.timeIntervalSince(max(from, coveredTo))
+            coveredTo = to
+        }
         let filledIn = history.filter { reading in
             reading.date > start && !aside(reading.date) && !live.contains { abs($0.timeIntervalSince(reading.date)) < 60 }
         }.count

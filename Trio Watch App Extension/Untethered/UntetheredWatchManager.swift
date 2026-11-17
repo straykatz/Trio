@@ -328,7 +328,7 @@ import WatchKit
         notePhoneVersion()
         switch envelope.message {
         case let .prepare(grant):
-            if let reason = UntetheredVersion.mismatch(phone: envelope.appVersion) ?? rejection(of: grant) {
+            if let reason = UntetheredVersion.mismatch(phone: envelope.appVersion) ?? Self.batteryTooLow ?? rejection(of: grant) {
                 isBusy = false
                 if let replyHandler {
                     reply(.rejected(reason: reason), epoch: envelope.epoch, via: replyHandler)
@@ -1209,7 +1209,7 @@ import WatchKit
 
     /// Why there is no start without the phone, for the status page; nil when one can start.
     var startWithoutPhoneUnavailable: String? {
-        if let reason = versionMismatch { return reason }
+        if let reason = versionMismatch ?? Self.batteryTooLow { return reason }
         guard let grant = data.standingGrant, let issuedAt = data.standingGrantIssuedAt else {
             return String(localized: "No copy from the phone to start from yet. It sends one while it has the pump.")
         }
@@ -1229,7 +1229,7 @@ import WatchKit
     func startWithoutPhone(phoneReachableIsNoPhone: Bool = false) {
         guard WatchState.shared.untetheredMode, WatchState.shared.allowUntetheredStartWithoutPhone,
               data.session.phase == .idle, !isBusy, phoneReachableIsNoPhone || !WCSession.default.isReachable,
-              standingGrantAge != nil,
+              standingGrantAge != nil, Self.batteryTooLow == nil,
               let grant = data.standingGrant
         else { return }
         setError(nil)
@@ -1353,7 +1353,7 @@ import WatchKit
         // a start by hand shows in the log: on 3 November at 18:04:55 one went out 6 s after Trio opened from the
         // new-pod notice, and nothing showed whether it was tapped
         Task { await WatchLogger.shared.log("⌚️ Untethered: Start Untethered tapped on the watch", force: true) }
-        if let reason = versionMismatch {
+        if let reason = versionMismatch ?? Self.batteryTooLow {
             setError(reason)
             return
         }
@@ -1892,6 +1892,49 @@ extension UntetheredWatchManager {
 
     static var batteryText: String { batteryPercent.map { "\($0) %" } ?? "–" }
 
+    /// Below 20 % no session starts: on 16 November (tester) three started at 5 %, and the watch died later.
+    static var batteryTooLow: String? {
+        guard let battery = batteryPercent, battery < 20 else { return nil }
+        return String(localized: "The watch's battery is at \(battery) %. Watch mode starts from 20 %. Charge the watch first.")
+    }
+
+    /// How far the low-battery steps went this session: 1 warned at 15 %, 2 told to take back on the iPhone, 3 handed back.
+    private static var batteryStep = 0
+
+    /// At 15 % a warning; at 10 % the watch hands back while the iPhone is in reach, or else says to take the pump
+    /// back on the iPhone (and hands back once it is in reach).
+    func checkBattery() {
+        guard data.session.phase == .active, let battery = Self.batteryPercent, battery <= 15 else { return }
+        if battery > 10 {
+            guard Self.batteryStep < 1 else { return }
+            Self.batteryStep = 1
+            Task { await WatchLogger.shared.log("⌚️ Untethered: battery \(battery) %, warned", force: true) }
+            notify(
+                id: Self.notificationPrefix + "battery",
+                title: String(localized: "Watch Battery Low"),
+                body: String(localized: "The watch's battery is at \(battery) %. Hand back to the iPhone soon. At 10 % the watch hands back by itself.")
+            )
+        } else if WCSession.default.isReachable {
+            guard Self.batteryStep < 3 else { return }
+            Self.batteryStep = 3
+            Task { await WatchLogger.shared.log("⌚️ Untethered: battery \(battery) %, handing back", force: true) }
+            notify(
+                id: Self.notificationPrefix + "battery",
+                title: String(localized: "Handing Back to iPhone"),
+                body: String(localized: "The watch's battery is at \(battery) %. The watch hands the pump back to the iPhone.")
+            )
+            end()
+        } else if Self.batteryStep < 2 {
+            Self.batteryStep = 2
+            Task { await WatchLogger.shared.log("⌚️ Untethered: battery \(battery) %, the iPhone is out of reach", force: true) }
+            notify(
+                id: Self.notificationPrefix + "battery",
+                title: String(localized: "Watch Battery Low"),
+                body: String(localized: "The watch's battery is at \(battery) % and the iPhone is out of reach. Take the pump back on the iPhone (Take Back the Pump Now) or charge the watch. The watch hands back once the iPhone is in reach.")
+            )
+        }
+    }
+
     /// Logs the battery when a session starts and, when it ends, how much it used and per hour.
     /// Kept in UserDefaults, so a relaunch in between doesn't lose the start.
     func noteSessionBattery(started: Bool) {
@@ -1902,6 +1945,7 @@ extension UntetheredWatchManager {
         defaults.set(now, forKey: Self.ownReadingAtKey)
         readingsFromPhoneSince = nil
         if started {
+            Self.batteryStep = 0
             defaults.set(battery, forKey: Self.batteryAtStartKey)
             defaults.set(now, forKey: Self.sessionStartKey)
             let text = battery.map { "\($0) %" } ?? "–"
@@ -2423,6 +2467,7 @@ extension UntetheredWatchManager {
 
     /// The start itself, once the pod showed nobody used it between the watch's two looks.
     private func startFallback(phoneNewest: Date, minutes: Int) {
+        guard Self.batteryTooLow == nil else { return }
         // the look's manager, if the start didn't take it (`takeover`): let go of the pod
         defer {
             if let unused = fallbackTakeoverPump {

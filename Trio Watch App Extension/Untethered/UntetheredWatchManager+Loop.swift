@@ -1832,6 +1832,7 @@ extension UntetheredWatchManager: CGMManagerDelegate {
     /// A loop that keeps failing to reach the pod while readings come in usually has a stuck connection, which
     /// otherwise only opening the app clears. The link is torn down and searched for afresh.
     func checkPodLink(now: Date = Date()) {
+        checkBattery()
         checkSensorStall(now: now)
         checkPodLinkEarly(now: now)
         // the early notice gets a few minutes to be answered before the pump goes back, up to the longer stall limit
