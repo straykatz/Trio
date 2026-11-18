@@ -327,7 +327,8 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         content.sound = .default
         content.interruptionLevel = .timeSensitive
         UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: "untethered.updatedDuringWatchMode", content: content, trigger: nil)
+            UNNotificationRequest(identifier: "untethered.updatedDuringWatchMode", content: content, trigger: nil),
+            withCompletionHandler: nil
         )
     }
 
@@ -394,7 +395,8 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         content.sound = .default
         content.interruptionLevel = .timeSensitive
         UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: "untethered.watchSilent", content: content, trigger: nil)
+            UNNotificationRequest(identifier: "untethered.watchSilent", content: content, trigger: nil),
+            withCompletionHandler: nil
         )
     }
     /// For what the screens show: not while the phone only asks the watch about the pod after another controller
@@ -924,7 +926,8 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
                 )
                 content.sound = .default
                 UNUserNotificationCenter.current().add(
-                    UNNotificationRequest(identifier: "untethered.pumpBackFromSilentWatch", content: content, trigger: nil)
+                    UNNotificationRequest(identifier: "untethered.pumpBackFromSilentWatch", content: content, trigger: nil),
+                    withCompletionHandler: nil
                 )
             }
         default:
