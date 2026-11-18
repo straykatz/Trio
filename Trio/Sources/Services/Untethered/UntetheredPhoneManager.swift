@@ -274,6 +274,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             if self.state.pumpReturnPending { await self.finishPumpReturn() }
             await self.uploadSpans()
             self.updateTimers()
+            self.noteBuildChange()
         }
     }
 
@@ -301,6 +302,32 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         updateTimers()
         publish()
         if state.pumpReturnPending { await finishPumpReturn() }
+        noteBuildChange()
+    }
+
+    /// The build the phone app last ran with its watch mode state readable.
+    private static let lastRunBuildKey = "untethered.lastRunBuild"
+
+    /// An update installed while the watch has the pump: watchOS updates the watch app too, in its own time, and the
+    /// watch app can't loop while it does. On 18 November the watch app's update got stuck, and for 70 minutes neither
+    /// device was seen dosing. Said at the first launch of the new build, before anything goes wrong.
+    @MainActor private func noteBuildChange() {
+        guard !UntetheredGate.isLocked, let current = UntetheredVersion.current else { return }
+        let previous = UserDefaults.standard.string(forKey: Self.lastRunBuildKey)
+        guard previous != current else { return }
+        UserDefaults.standard.set(current, forKey: Self.lastRunBuildKey)
+        guard let previous, isWatchInCharge else { return }
+        warning(.watch, "Untethered: Trio updated from \(previous) to \(current) while the watch has the pump")
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "Trio Updated During Watch Mode")
+        content.body = String(
+            localized: "The watch has the pump. Trio on the watch updates too and can't loop while it does. Take the pump back on the iPhone now, or open Trio on the watch and check that it still loops."
+        )
+        content.sound = .default
+        content.interruptionLevel = .timeSensitive
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "untethered.updatedDuringWatchMode", content: content, trigger: nil)
+        )
     }
 
     var isWatchInCharge: Bool { !state.session.isIdle }
