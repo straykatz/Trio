@@ -990,7 +990,7 @@ extension UntetheredWatchManager {
             $0.pendingPumpAlerts.removeAll { $0.managerIdentifier == self.pumpManager?.pluginIdentifier }
         }
         // no loop follows until the phone pairs the next pod
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [Self.notLoopingID])
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: Self.notLoopingIDs)
         store.record(
             UntetheredRecord(key: UntetheredRecord.podEndedKey, date: now, kind: .podEnded(now)),
             epoch: data.session.epoch
@@ -1475,7 +1475,7 @@ extension UntetheredWatchManager: PumpManagerDelegate {
         guard toWatch else {
             UNUserNotificationCenter.current()
                 .removePendingNotificationRequests(
-                    withIdentifiers: alerts.map { Self.notificationID($0.id) } + [Self.notLoopingID, Self.noReadingsID]
+                    withIdentifiers: alerts.map { Self.notificationID($0.id) } + Self.notLoopingIDs + [Self.noReadingsID]
                 )
             return
         }
@@ -2310,7 +2310,12 @@ extension UntetheredWatchManager {
         if !data.podEnded, let lastLoop = loopReference,
            now.timeIntervalSince(lastLoop) > Self.notLoopingAfter
         {
-            alarm("loop", title: Self.notLoopingTitle, body: Self.notLoopingBody, every: 30 * 60)
+            alarm(
+                "loop",
+                title: Self.notLoopingTitle,
+                body: Self.notLoopingBody(minutes: Int(now.timeIntervalSince(lastLoop) / 60)),
+                every: 30 * 60
+            )
         }
         // looping on the phone's readings hides a broken link of the watch's own: said after 20 minutes
         if readingsFromPhoneSince != nil, let own = ownReadingAt, now.timeIntervalSince(own) > Self.ownReadingWarnAfter {
@@ -2371,18 +2376,43 @@ extension UntetheredWatchManager {
 
     static let notLoopingID = "untethered.loop"
     private static let notLoopingAfter: TimeInterval = 20 * 60
-    private static var notLoopingTitle: String { String(localized: "Not Looping") }
-    private static var notLoopingBody: String { String(localized: "The watch hasn't looped for 20 minutes.") }
+    /// The same alarm again this long after the first, booked with it: a watch app that froze, crashed or is being
+    /// updated can't sound anything itself, so only what is booked ahead reaches the wrist (18 November: the watch
+    /// app stuck in an update, the phone not dosing, nothing heard from the watch for 70 minutes).
+    private static let notLoopingRepeats: [TimeInterval] = [15 * 60, 30 * 60]
+    /// The first alarm and its repeats, for taking them all back.
+    static var notLoopingIDs: [String] {
+        [notLoopingID] + notLoopingRepeats.indices.map { notLoopingID + ".again\($0 + 1)" }
+    }
 
-    /// Booked 20 minutes ahead after every loop, and at the takeover: it sounds even when nothing wakes the watch app
-    /// to check. The next loop books it again; a hand-back or a pod ended on the watch takes it back.
+    private static var notLoopingTitle: String { String(localized: "Not Looping") }
+    private static func notLoopingBody(minutes: Int) -> String {
+        String(
+            localized: "The watch hasn't looped for \(minutes) minutes. Open Trio on the watch. If it doesn't open or still doesn't loop, take the pump back on the iPhone."
+        )
+    }
+
+    /// Booked 20 minutes ahead after every loop, and at the takeover, with its repeats 35 and 50 minutes ahead: they
+    /// sound even when nothing wakes the watch app to check, or the app can't run at all. The next loop books them
+    /// again; a hand-back or a pod ended on the watch takes them back.
     func scheduleNotLoopingAlert(from lastLoop: Date) {
         notify(
             id: Self.notLoopingID,
             title: Self.notLoopingTitle,
-            body: Self.notLoopingBody,
+            body: Self.notLoopingBody(minutes: Int(Self.notLoopingAfter / 60)),
             after: lastLoop.addingTimeInterval(Self.notLoopingAfter).timeIntervalSinceNow
         )
+        for (index, extra) in Self.notLoopingRepeats.enumerated() {
+            let after = Self.notLoopingAfter + extra
+            // a repeat already past isn't sounded at once: the first, or the running app's own alarm, has said it
+            guard lastLoop.addingTimeInterval(after) > Date() else { continue }
+            notify(
+                id: Self.notLoopingID + ".again\(index + 1)",
+                title: Self.notLoopingTitle,
+                body: Self.notLoopingBody(minutes: Int(after / 60)),
+                after: lastLoop.addingTimeInterval(after).timeIntervalSinceNow
+            )
+        }
     }
 
     /// Every untethered notification's identifier starts with it, so they show with Trio open on the wrist too.
@@ -2400,7 +2430,8 @@ extension UntetheredWatchManager {
     /// The alarms that mean nobody is looping or the user is in danger: critical with Settings › Notifications ›
     /// Critical Alerts on, so they get through Silent Mode and Focus on the wrist without the phone too.
     static let criticalAlarmIDs: Set<String> = [
-        notificationPrefix + "urgentLow", notLoopingID, noReadingsID, podLinkID
+        notificationPrefix + "urgentLow", notLoopingID, notLoopingID + ".again1", notLoopingID + ".again2", noReadingsID,
+        podLinkID
     ]
     /// Who doses changed: through Focus and kept on the screen, and the log says it was booked (7 November: two
     /// takeovers, and neither "Watch Took Over" was noticed).
