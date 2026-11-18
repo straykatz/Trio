@@ -245,6 +245,28 @@ extension NightscoutAPI {
         }
     }
 
+    /// The time of the newest device status (a loop, whichever device uploaded it); nil when there is none.
+    func fetchNewestDeviceStatusDate() async throws -> Date? {
+        var components = URLComponents()
+        components.scheme = url.scheme
+        components.host = url.host
+        components.port = url.port
+        components.path = Config.statusPath
+        components.queryItems = [URLQueryItem(name: "count", value: "1")]
+        guard let url = components.url else { throw URLError(.badURL) }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        if let secret = secret {
+            request.addValue(secret.sha1(), forHTTPHeaderField: "api-secret")
+        }
+        let (data, _) = try await URLSession.shared.data(for: request)
+        guard let statuses = try JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+              let createdAt = statuses.first?["created_at"] as? String
+        else { return nil }
+        return Formatter.iso8601withFractionalSeconds.date(from: createdAt) ?? Formatter.iso8601.date(from: createdAt)
+    }
+
     func fetchTempTargets(sinceDate: Date? = nil) async throws -> [TempTarget] {
         var components = URLComponents()
         components.scheme = url.scheme

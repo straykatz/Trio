@@ -254,6 +254,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
                 Task { @MainActor in
                     await self?.checkForeignSession()
                     await self?.tickWhileWaiting()
+                    await self?.checkWatchSilence()
                 }
             }
             .store(in: &subscriptions)
@@ -331,6 +332,60 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
     }
 
     var isWatchInCharge: Bool { !state.session.isIdle }
+
+    // MARK: - A silent watch near the phone
+
+    /// Since when this phone app has seen the watch in charge; the silence counts from here at the earliest.
+    private var watchInChargeSince: Date?
+    /// The silence already said: once per silence.
+    private var watchSilenceNotifiedFor: Date?
+    private static let watchSilenceAfter: TimeInterval = 20 * 60
+    /// The phone's own reading this recent: it is within Bluetooth range of the sensor, so near the user and the watch.
+    private static let phoneNearWithin: TimeInterval = 6 * 60
+
+    /// The watch has the pump, the phone reads the sensor itself, so the user and the watch are near it, yet nothing has
+    /// come from the watch for 20 minutes: its app may be stuck, crashed or updating, and can't say so itself
+    /// (18 November: the watch app's update got stuck; for 70 minutes the phone, beside it and reading the sensor,
+    /// neither dosed nor heard from it). A phone far away reads no sensor and doesn't check, so all-day watch mode
+    /// with the phone left behind never sets it off. With the watch's own Nightscout upload on, a watch loop in
+    /// Nightscout in that time means the watch loops and only the link between the two is down: nothing is said.
+    @MainActor private func checkWatchSilence() async {
+        guard isWatchInCharge, !state.session.isCheckingForeignSession else {
+            watchInChargeSince = nil
+            watchSilenceNotifiedFor = nil
+            return
+        }
+        let now = Date()
+        if watchInChargeSince == nil { watchInChargeSince = now }
+        guard let own = PhoneOwnGlucose.newest, now.timeIntervalSince(own) < Self.phoneNearWithin,
+              let reference = [WatchAppPresence.lastHeard, watchInChargeSince].compactMap({ $0 }).max()
+        else { return }
+        let silence = now.timeIntervalSince(reference)
+        guard silence >= Self.watchSilenceAfter, watchSilenceNotifiedFor != reference else { return }
+        let minutes = Int(silence / 60)
+        let settings = settingsManager.settings
+        if settings.nightscoutUploadWatch, settings.isUploadEnabled,
+           let newest = await nightscoutManager.fetchNewestDeviceStatusDate(),
+           now.timeIntervalSince(newest) < Self.watchSilenceAfter
+        {
+            debug(.watch, "Untethered: nothing from the watch for \(minutes) min, but Nightscout has a loop \(Int(now.timeIntervalSince(newest) / 60)) min old: it loops")
+            return
+        }
+        // still in charge, and still the same silence, after the wait for Nightscout
+        guard isWatchInCharge, watchSilenceNotifiedFor != reference else { return }
+        watchSilenceNotifiedFor = reference
+        warning(.watch, "Untethered: nothing from the watch for \(minutes) min while the phone reads the sensor")
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "No Word From the Watch")
+        content.body = String(
+            localized: "The watch has the pump, but the iPhone hasn't heard from it for \(minutes) minutes, though both are near the sensor. Open Trio on the watch and check that it loops. If it doesn't open, take the pump back on the iPhone."
+        )
+        content.sound = .default
+        content.interruptionLevel = .timeSensitive
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "untethered.watchSilent", content: content, trigger: nil)
+        )
+    }
     /// For what the screens show: not while the phone only asks the watch about the pod after another controller
     /// used it (`isCheckingForeignSession`); dosing is held then all the same.
     var isWatchShownInCharge: Bool { isWatchInCharge && !state.session.isCheckingForeignSession }

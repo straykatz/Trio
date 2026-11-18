@@ -28,6 +28,12 @@ protocol NightscoutManager: GlucoseSource {
     var cgmURL: URL? { get }
     /// Past loops, each as its own device status at its own time, so Nightscout's history shows their forecasts.
     @discardableResult func uploadDeterminationHistory(_ determinations: [Determination]) async -> Bool
+    /// The newest loop in Nightscout, whichever device uploaded it; nil without Nightscout or when the fetch failed.
+    func fetchNewestDeviceStatusDate() async -> Date?
+}
+
+extension NightscoutManager {
+    func fetchNewestDeviceStatusDate() async -> Date? { nil }
 }
 
 final class BaseNightscoutManager: NightscoutManager, Injectable {
@@ -427,6 +433,16 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
         } catch {
             warning(.nightscout, "Carbs fetch failed", error: error)
             return []
+        }
+    }
+
+    func fetchNewestDeviceStatusDate() async -> Date? {
+        guard let nightscout = nightscoutAPI, isNetworkReachable else { return nil }
+        do {
+            return try await nightscout.fetchNewestDeviceStatusDate()
+        } catch {
+            warning(.nightscout, "Device status fetch failed", error: error)
+            return nil
         }
     }
 
