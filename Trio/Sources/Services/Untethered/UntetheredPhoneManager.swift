@@ -339,6 +339,10 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
     private var watchInChargeSince: Date?
     /// The silence already said: once per silence.
     private var watchSilenceNotifiedFor: Date?
+    /// The silence the watch was asked about: once per silence. Kept until its answer or the session's end.
+    private var watchSilenceAskedFor: Date?
+    /// First the watch is asked whether it still holds the pump; a watch that answers it doesn't is relieved at once.
+    private static let watchSilenceAskAfter: TimeInterval = 6 * 60
     private static let watchSilenceAfter: TimeInterval = 20 * 60
     /// The phone's own reading this recent: it is within Bluetooth range of the sensor, so near the user and the watch.
     private static let phoneNearWithin: TimeInterval = 6 * 60
@@ -353,6 +357,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         guard isWatchInCharge, !state.session.isCheckingForeignSession else {
             watchInChargeSince = nil
             watchSilenceNotifiedFor = nil
+            watchSilenceAskedFor = nil
             return
         }
         let now = Date()
@@ -361,6 +366,12 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
               let reference = [WatchAppPresence.lastHeard, watchInChargeSince].compactMap({ $0 }).max()
         else { return }
         let silence = now.timeIntervalSince(reference)
+        // after 6 minutes, asked once: queued, and as a complication transfer it wakes the watch app at once
+        if silence >= Self.watchSilenceAskAfter, watchSilenceAskedFor != reference, state.session.phase == .active {
+            watchSilenceAskedFor = reference
+            debug(.watch, "Untethered: nothing from the watch for \(Int(silence / 60)) min while the phone reads the sensor: asking whether it holds the pump")
+            send(.statusQuery, epoch: state.session.epoch)
+        }
         guard silence >= Self.watchSilenceAfter, watchSilenceNotifiedFor != reference else { return }
         let minutes = Int(silence / 60)
         let settings = settingsManager.settings
@@ -894,6 +905,28 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             guard settings.dosingMode != mode else { return }
             settings.dosingMode = mode
             self.settingsManager.settings = settings
+        // the answer to the question about a silent watch (`checkWatchSilence`): it holds nothing, for this session
+        // or one it no longer knows (a relaunch that lost its state), so the phone takes the pod back at once, as Take
+        // Back the Pump Now does, instead of waiting out the 20 minutes (after Jeremy Barnum's Sport Mode,
+        // LoopKit/Loop#2545, 7 November)
+        case .statusReport(holding: nil)
+            where self.state.session.phase == .active && envelope.epoch <= self.state.session.epoch
+            && self.watchSilenceAskedFor != nil:
+            replyHandler?([:])
+            self.watchSilenceAskedFor = nil
+            warning(.watch, "Untethered: the silent watch says it holds no pump; the phone takes it back")
+            await self.forceTakeBack()
+            if self.state.session.isIdle {
+                let content = UNMutableNotificationContent()
+                content.title = String(localized: "Pump Back on iPhone")
+                content.body = String(
+                    localized: "Trio on the watch had stopped watch mode without the iPhone hearing of it, so the iPhone took the pump back. Start watch mode again when you want."
+                )
+                content.sound = .default
+                UNUserNotificationCenter.current().add(
+                    UNNotificationRequest(identifier: "untethered.pumpBackFromSilentWatch", content: content, trigger: nil)
+                )
+            }
         default:
             await self.apply(.received(envelope.message, epoch: envelope.epoch), reply: replyHandler)
         }
