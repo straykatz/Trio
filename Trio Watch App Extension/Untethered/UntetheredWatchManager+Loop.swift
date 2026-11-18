@@ -1404,6 +1404,15 @@ extension UntetheredWatchManager: PumpManagerDelegate {
         if message.hasPrefix("Pod connected"), isSessionPump(manager as AnyObject) {
             DispatchQueue.main.async { self.loopAgainIfPodBack() }
         }
+        // ponytail: matched on OmnipodKit's disconnect line, as the sensor's link errors above; a link OmnipodKit
+        // didn't end itself ("no reason recorded") and nothing from the pod either: watchOS ended it
+        if isSessionPump(manager as AnyObject) {
+            if message.hasPrefix("[disconnect] ours: no reason recorded"), message.contains("app in background") {
+                DispatchQueue.main.async { self.noteBackgroundLinkCut() }
+            } else if message.hasPrefix("[connect] configured in") {
+                DispatchQueue.main.async { self.backgroundLinkCuts.removeAll() }
+            }
+        }
         // ponytail: matched on G7SensorKit's log line, which is the only place it reports a link error;
         // move to a delegate call if the kit ever reports one. 14 = the peer removed the pairing: the sensor no
         // longer has this watch's bond. 15 = encryption timed out, which a weak link does too: only twice in a row,
@@ -2011,6 +2020,44 @@ extension UntetheredWatchManager: CGMManagerDelegate {
         Task { await WatchLogger.shared.log("⌚️ Untethered: early notice — open Trio on the watch (no loop for \(minutes) min)", force: true) }
         // already in front: try now rather than at the next reading
         if WKApplication.shared().applicationState == .active { retryPodInFront() }
+    }
+
+    /// Cuts this many, over at least `restartWatchSpan`, within `restartWatchWindow`, with no link through: a restart.
+    static let restartWatchCuts = 8
+    static let restartWatchSpan: TimeInterval = 4 * 60
+    static let restartWatchWindow: TimeInterval = 15 * 60
+    /// Said again at most this often while it goes on.
+    static let restartWatchRepeat: TimeInterval = 2 * 60 * 60
+    static let restartWatchID = notificationPrefix + "restartWatch"
+
+    /// The pod's links cut from the watch's own side about a second after connecting, again and again, with Trio in
+    /// the background: a state of watchOS a restart of the watch clears, not something Trio can mend (18 November:
+    /// 46 of 50 such cuts in the morning, the sensor's link cut with them; none in the afternoon after the watch app
+    /// was restarted; 15 November: a clean night after a restart). Said once the cuts reach over two readings with no
+    /// link through, before the 14-minute hand-back.
+    func noteBackgroundLinkCut(now: Date = Date()) {
+        backgroundLinkCuts.append(now)
+        backgroundLinkCuts.removeAll { now.timeIntervalSince($0) > Self.restartWatchWindow }
+        guard data.session.phase == .active, backgroundLinkCuts.count >= Self.restartWatchCuts,
+              let first = backgroundLinkCuts.first, now.timeIntervalSince(first) >= Self.restartWatchSpan,
+              restartWatchNoticeAt.map({ now.timeIntervalSince($0) > Self.restartWatchRepeat }) ?? true
+        else { return }
+        restartWatchNoticeAt = now
+        let cuts = backgroundLinkCuts.count
+        Task {
+            await WatchLogger.shared.log(
+                "⌚️ Untethered: \(cuts) background pod links cut by the watch itself in \(Int(now.timeIntervalSince(first) / 60)) min, none through: asking for a restart of the watch",
+                force: true
+            )
+        }
+        notify(
+            id: Self.restartWatchID,
+            title: String(localized: "Restart the Watch"),
+            body: String(
+                localized: "Bluetooth on the watch keeps cutting the pod's link right after it connects, while Trio is in the background. A restart of the watch clears this: hold the side button, then Power Off, and turn it on again. Open Trio afterwards. Until then, opening Trio gets the pod through."
+            ),
+            asksForAction: true
+        )
     }
 
     /// Trio came to the front after the early notice: the pod is tried at once, on the newest reading, or right after

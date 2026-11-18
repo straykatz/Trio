@@ -115,6 +115,11 @@ import WatchKit
     @ObservationIgnored var podLinkNoticeCount = 0
     /// When this stall's early notice asked to open Trio on the watch (`checkPodLinkEarly`); nil once a loop gets through.
     @ObservationIgnored var podLinkEarlyNoticeAt: Date?
+    /// The session pod's background links cut from the watch's own side right after connecting, newest last
+    /// (`noteBackgroundLinkCut`); emptied by a link that gets through.
+    @ObservationIgnored var backgroundLinkCuts: [Date] = []
+    /// When "Restart the Watch" was last said.
+    @ObservationIgnored var restartWatchNoticeAt: Date?
     /// The pod tried with Trio in front after that notice: waiting for a loop in flight, or running.
     @ObservationIgnored var podFrontTry: PodFrontTry?
     enum PodFrontTry { case pending, running }
