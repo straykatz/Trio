@@ -112,7 +112,7 @@ final class WatchLogIngest: @unchecked Sendable {
     func requestLatest(timeout: Duration = requestTimeout) async {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
-        guard session.activationState == .activated, session.isPaired, session.isWatchAppInstalled else { return }
+        guard session.activationState == .activated, session.isPaired, WatchAppPresence.isInstalled(session) else { return }
         let before = ingestedBatches.withLock { $0 }
         Self.send([WatchLogTransfer.request: true])
         guard session.isReachable else { return }

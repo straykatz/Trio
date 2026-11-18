@@ -10,6 +10,40 @@ import UIKit
 import WatchConnectivity
 
 /// Protocol defining the base functionality for Watch communication
+/// Whether Trio is on the watch: watchOS's `isWatchAppInstalled`, or the watch app heard from lately. After an update
+/// watchOS said "not installed" for 45 minutes while the watch app ran, wrote its log to the phone and, hearing
+/// nothing back, took the pump as if the phone were gone (18 November, 14:20 to 15:05). Kept across launches: the
+/// phone app restarted in between (14:37).
+enum WatchAppPresence {
+    /// Anything from the watch app this recent counts as the app being there.
+    static let trustFor: TimeInterval = 3 * 60 * 60
+    private static let key = "WatchAppPresence.lastHeard"
+    private static let lock = NSLock()
+
+    static func heardFromWatch() {
+        lock.lock()
+        defer { lock.unlock() }
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: key)
+    }
+
+    static var lastHeard: Date? {
+        lock.lock()
+        defer { lock.unlock() }
+        let seconds = UserDefaults.standard.double(forKey: key)
+        return seconds > 0 ? Date(timeIntervalSince1970: seconds) : nil
+    }
+
+    static func isInstalled(_ session: WCSession) -> Bool {
+        if session.isWatchAppInstalled { return true }
+        guard session.isPaired, let heard = lastHeard else { return false }
+        return Date().timeIntervalSince(heard) < trustFor
+    }
+
+    static var heardText: String {
+        lastHeard.map { "\(Int(Date().timeIntervalSince($0) / 60)) min ago" } ?? "never"
+    }
+}
+
 protocol WatchManager {
     func setupWatchState() async -> WatchState?
 }
@@ -152,7 +186,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
     /// The watch app is open, or Trio sits on the active watch face, which shows the newest reading with the
     /// app in the background too.
     private func watchNeedsState(_ session: WCSession) -> Bool {
-        session.isPaired && session.isWatchAppInstalled
+        session.isPaired && WatchAppPresence.isInstalled(session)
             && (session.isReachable || session.isComplicationEnabled || fallbackWatchesPhone)
     }
 
@@ -211,7 +245,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
         guard let session = session, watchNeedsState(session) else {
             debug(
                 .watch,
-                "Watch state skipped: paired \(session?.isPaired ?? false), app installed \(session?.isWatchAppInstalled ?? false), reachable \(session?.isReachable ?? false), Trio on the face \(session?.isComplicationEnabled ?? false)"
+                "Watch state skipped: paired \(session?.isPaired ?? false), app installed \(session?.isWatchAppInstalled ?? false) (heard from it \(WatchAppPresence.heardText)), reachable \(session?.isReachable ?? false), Trio on the face \(session?.isComplicationEnabled ?? false)"
             )
             return nil
         }
@@ -800,7 +834,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
             return nil
         }
 
-        guard session.isWatchAppInstalled else {
+        guard WatchAppPresence.isInstalled(session) else {
             debug(.watch, "Trio watch app not installed")
             return nil
         }
@@ -897,6 +931,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
         didReceiveMessage message: [String: Any],
         replyHandler: @escaping ([String: Any]) -> Void
     ) {
+        WatchAppPresence.heardFromWatch()
         if message[UntetheredEnvelope.key] != nil {
             untethered.receive(message, replyHandler: replyHandler)
             return
@@ -937,6 +972,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
     }
 
     func session(_: WCSession, didReceiveMessage message: [String: Any]) {
+        WatchAppPresence.heardFromWatch()
         if message[UntetheredEnvelope.key] != nil {
             untethered.receive(message, replyHandler: nil)
             return
@@ -1100,6 +1136,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
     }
 
     func session(_: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
+        WatchAppPresence.heardFromWatch()
         if userInfo[UntetheredEnvelope.key] != nil {
             untethered.receive(userInfo, replyHandler: nil)
             return
@@ -1161,13 +1198,34 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
     private static func confirmWatchLogs(_ id: String?) {
         guard let id else { return }
         let session = WCSession.default
-        guard session.activationState == .activated, session.isPaired, session.isWatchAppInstalled else { return }
+        guard session.activationState == .activated, session.isPaired, WatchAppPresence.isInstalled(session) else { return }
         _ = session.transferUserInfo(["watchLogsAck": [id]])
     }
 
     func session(_: WCSession, didReceive file: WCSessionFile) {
+        WatchAppPresence.heardFromWatch()
         WatchLogIngest.shared.receive(file.fileURL, metadata: file.metadata)
     }
+
+    /// A state or untethered message the system couldn't deliver: said, so a phone that sends into nothing shows in
+    /// the log (18 November: 45 minutes of nothing reaching the watch, and nothing on the phone said so).
+    func session(_: WCSession, didFinish userInfoTransfer: WCSessionUserInfoTransfer, error: Error?) {
+        guard let error else { return }
+        warning(.watch, "Watch transfer not delivered (\(userInfoTransfer.userInfo.keys.sorted().joined(separator: ", ")))", error: error)
+    }
+
+    #if os(iOS)
+        /// Paired, installed or the watch face changed: a watch app that just finished installing gets the state at once,
+        /// not only at its first message.
+        func sessionWatchStateDidChange(_ session: WCSession) {
+            info(
+                .watch,
+                "Watch changed: paired \(session.isPaired), app installed \(session.isWatchAppInstalled), Trio on the face \(session.isComplicationEnabled)"
+            )
+            Task { @MainActor [untethered] in untethered?.reachabilityChanged() }
+            self.pushWatchState()
+        }
+    #endif
 
     #if os(iOS)
         func sessionDidBecomeInactive(_: WCSession) {}
@@ -1178,6 +1236,8 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
 
     func sessionReachabilityDidChange(_ session: WCSession) {
         debug(.watch, "Watch reachable: \(session.isReachable)")
+        // reachable means the watch app runs
+        if session.isReachable { WatchAppPresence.heardFromWatch() }
         Task { @MainActor [untethered] in untethered?.reachabilityChanged() }
 
         if session.isReachable {
@@ -1503,7 +1563,7 @@ extension BaseWatchManager: SettingsObserver, PumpSettingsObserver {
 
 extension BaseWatchManager: SnoozeObserver {
     @MainActor func snoozeDidChange(_: Date) {
-        guard let session = self.session, session.isPaired, session.isReachable, session.isWatchAppInstalled else { return }
+        guard let session = self.session, session.isPaired, session.isReachable, WatchAppPresence.isInstalled(session) else { return }
         self.pushWatchState()
     }
 }

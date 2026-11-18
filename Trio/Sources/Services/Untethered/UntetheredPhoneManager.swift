@@ -334,7 +334,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
                 return
             }
             let session = WCSession.default
-            guard WCSession.isSupported(), session.activationState == .activated, session.isWatchAppInstalled else { return }
+            guard WCSession.isSupported(), session.activationState == .activated, WatchAppPresence.isInstalled(session) else { return }
             try? session.updateApplicationContext([WatchMessageKeys.untetheredWake: Date().timeIntervalSince1970])
         }
     }
@@ -358,7 +358,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
               let reading = PhoneOwnGlucose.newestReading
         else { return }
         let session = WCSession.default
-        guard WCSession.isSupported(), session.activationState == .activated, session.isWatchAppInstalled else { return }
+        guard WCSession.isSupported(), session.activationState == .activated, WatchAppPresence.isInstalled(session) else { return }
         phoneReadingSentFor = own
         // only the newest is of use
         for transfer in session.outstandingUserInfoTransfers
@@ -388,7 +388,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         else { return false }
         guard own > (phoneBackToldFor ?? .distantPast) else { return true }
         let session = WCSession.default
-        guard WCSession.isSupported(), session.activationState == .activated, session.isWatchAppInstalled else { return true }
+        guard WCSession.isSupported(), session.activationState == .activated, WatchAppPresence.isInstalled(session) else { return true }
         phoneBackToldFor = own
         let context: [String: Any] = [
             WatchMessageKeys.untetheredWake: Date().timeIntervalSince1970,
@@ -452,7 +452,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         // the watch can't start on its own
         guard isEnabled, settingsManager.settings.allowUntetheredStartWithoutPhoneWatch,
               UntetheredGate.phoneMayDose, WCSession.isSupported(), session.activationState == .activated,
-              session.isWatchAppInstalled, let control = apsManager.pumpManager as? ExclusiveDeviceControl,
+              WatchAppPresence.isInstalled(session), let control = apsManager.pumpManager as? ExclusiveDeviceControl,
               !control.isControlReleased
         else { return }
         // The watch may start from this grant while the phone still holds the pod (phone off or out of reach). From
@@ -1215,7 +1215,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         guard isEnabled else {
             throw UntetheredError.unavailable(String(localized: "Watch mode is off in Settings › Apple Watch."))
         }
-        guard WCSession.isSupported(), WCSession.default.isPaired, WCSession.default.isWatchAppInstalled else {
+        guard WCSession.isSupported(), WCSession.default.isPaired, WatchAppPresence.isInstalled(WCSession.default) else {
             throw UntetheredError.unavailable(String(localized: "Trio is not installed on a paired Apple Watch."))
         }
         // not reachable this moment is no reason to refuse: the start offers itself for half a minute (`retryPrepare`)
