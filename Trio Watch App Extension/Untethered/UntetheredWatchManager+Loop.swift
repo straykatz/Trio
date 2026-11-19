@@ -71,12 +71,13 @@ extension UntetheredWatchManager {
                 if self.podFrontTry == .pending { self.retryPodInFront() }
                 self.endLoopHold(releaseHold)
             }
-            // the pod only once the sensor's link is closed (see `waitForSensorQuiet`)
+            // Test (19 November): the pod at once after the reading, while the sensor's link and its wake are still
+            // up, as Jeremy Barnum's Sport Mode does; he never saw the background cuts in his logs. Waiting for the
+            // sensor's link to close (`waitForSensorQuiet`, from 22 October) made every background pod connection a
+            // new one with no Bluetooth link open, which is where the cuts came (18 and 19 November).
             if trigger == .newGlucose {
-                await self.waitForSensorQuiet()
-                Self.trace("sensor link quiet, to the pod")
-                // the session may have ended meanwhile (2026-10-23 08:25:46: a loop ran on after the hand-back)
-                guard self.isActive else { return }
+                let sensorLink = watchCGMIsConnected(self.cgmManager) ? "still open" : "closed"
+                Task { await WatchLogger.shared.log("⌚️ Untethered: pod at once after the reading (sensor link \(sensorLink))") }
             }
             // the pod read is a pod command too: none without background time left (see `enact`)
             var explained = true
