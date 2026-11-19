@@ -15,6 +15,9 @@ enum Screen: Identifiable, Hashable {
     case isfEditor
     case crEditor
     case targetsEditor
+    case therapyProfiles
+    case therapyProfileDetail(String)
+    case therapyProfileEditor(TherapyProfiles.Editor, profileName: String)
     case treatmentView
     case history
     case cgm
@@ -100,6 +103,28 @@ extension Screen {
         case .targetsEditor:
             UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
                 TargetsEditor.RootView(resolver: resolver)
+            }
+        // switching or editing a profile changes what the watch doses with: locked as the other therapy settings
+        case .therapyProfiles:
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                TherapyProfiles.RootView(resolver: resolver)
+            }
+        case let .therapyProfileDetail(name):
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                TherapyProfiles.ProfileRootView(resolver: resolver, profileName: name)
+            }
+        case let .therapyProfileEditor(editor, profileName):
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                switch editor {
+                case .basal:
+                    BasalProfileEditor.RootView(resolver: resolver, profileName: profileName)
+                case .carbRatio:
+                    CarbRatioEditor.RootView(resolver: resolver, profileName: profileName)
+                case .sensitivity:
+                    ISFEditor.RootView(resolver: resolver, profileName: profileName)
+                case .target:
+                    TargetsEditor.RootView(resolver: resolver, profileName: profileName)
+                }
             }
         case .treatmentView:
             UntetheredTreatmentGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {

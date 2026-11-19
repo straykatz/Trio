@@ -246,7 +246,8 @@ private final class StubNightscoutManager: NightscoutManager {
     func uploadNoteTreatment(note _: String) async -> Bool { true }
     func uploadUntetheredSession(from _: Date, to _: Date?) async -> Bool { true }
     func uploadDeterminationHistory(_: [Determination]) async -> Bool { true }
-    func importSettings() async -> ScheduledNightscoutProfile? { nil }
+    func uploadTherapyProfiles() async {}
+    func importSettings() async -> FetchedNightscoutProfileStore? { nil }
 }
 
 private final class StubHealthKitManager: HealthKitManager {
