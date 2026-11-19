@@ -396,12 +396,12 @@ final class BaseAPSManager: APSManager, Injectable {
 
     /// Returns whether the determination was enacted.
     private func executeLoop(loopStatRecord: inout LoopStats) async throws -> Bool {
-        try await determineBasal()
+        let determination = try await determineBasal()
 
         // Closed loop: also enact the determination.
         var enacted = false
         if settings.dosingMode.automation != .off {
-            enacted = try await enactDetermination()
+            enacted = try await enactDetermination(id: determination?.id)
         }
 
         let endDate = Date()
@@ -509,7 +509,7 @@ final class BaseAPSManager: APSManager, Injectable {
         await tddStorage.storeTDD(tddResult, at: Date())
     }
 
-    private func determineBasal() async throws {
+    @discardableResult private func determineBasal() async throws -> Determination? {
         try await calculateAndStoreTDD()
 
         var invalidGlucoseError: String?
@@ -588,6 +588,7 @@ final class BaseAPSManager: APSManager, Injectable {
                     }
                 }
             }
+            return determination
         } catch {
             iobFileDidUpdate.send(())
 
@@ -953,10 +954,11 @@ final class BaseAPSManager: APSManager, Injectable {
     }
 
     /// Returns false when the determination is skipped because the pump is suspended.
-    private func enactDetermination() async throws -> Bool {
-        guard let determinationID = try await determinationStorage
-            .fetchLastDeterminationObjectID(predicate: NSPredicate.predicateFor30MinAgoForDetermination).first
-        else {
+    private func enactDetermination(id: UUID?) async throws -> Bool {
+        // only the determination this cycle saved; never fall back to an older one
+        let context = CoreDataStack.shared.newTaskContext()
+        context.name = "enactDetermination"
+        guard let id, let values = try await Self.dosingValues(ofDeterminationWithID: id, on: context) else {
             throw APSError.apsError(message: "Determination not found")
         }
 
@@ -974,7 +976,7 @@ final class BaseAPSManager: APSManager, Injectable {
             throw APSError.manualBasalTemp(message: "Loop not possible during the manual basal temp")
         }
 
-        let (rateDecimal, durationInSeconds, smbToDeliver) = try await setValues(determinationID: determinationID)
+        let (rateDecimal, durationInSeconds, smbToDeliver) = values
 
         if let rate = rateDecimal, let duration = durationInSeconds {
             try await performBasal(pump: pump, rate: rate, duration: duration)
@@ -991,23 +993,21 @@ final class BaseAPSManager: APSManager, Injectable {
         return true
     }
 
-    private func setValues(determinationID: NSManagedObjectID) async throws
-        -> (NSDecimalNumber?, TimeInterval?, NSDecimalNumber?)
+    /// Temp basal and SMB of the determination with this id; nil if it wasn't saved or was already enacted.
+    static func dosingValues(ofDeterminationWithID id: UUID, on context: NSManagedObjectContext) async throws
+        -> (NSDecimalNumber?, TimeInterval?, NSDecimalNumber?)?
     {
-        let context = CoreDataStack.shared.newTaskContext()
-        context.name = "setValues"
-        return try await context.perform {
-            do {
-                let determination = try context.existingObject(with: determinationID) as? OrefDetermination
+        try await context.perform {
+            let request = OrefDetermination.fetchRequest() as NSFetchRequest<OrefDetermination>
+            request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+            request.fetchLimit = 1
+            guard let determination = try context.fetch(request).first, !determination.enacted else { return nil }
 
-                let rate = determination?.rate
-                let duration = determination?.duration.flatMap { TimeInterval(truncating: $0) * 60 }
-                let smbToDeliver = determination?.smbToDeliver ?? 0
+            let rate = determination.rate
+            let duration = determination.duration.flatMap { TimeInterval(truncating: $0) * 60 }
+            let smbToDeliver = determination.smbToDeliver ?? 0
 
-                return (rate, duration, smbToDeliver)
-            } catch {
-                throw error
-            }
+            return (rate, duration, smbToDeliver)
         }
     }
 

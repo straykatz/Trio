@@ -2216,7 +2216,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             let context = CoreDataStack.shared.newTaskContext()
             context.name = "untetheredDetermination"
             let uploaded = determination.deliverAt.map { uploadedByWatch.contains(Int($0.timeIntervalSince1970)) } ?? false
-            await openAPS.processDetermination(determination, enactedAt: enactedAt, uploadedToNS: uploaded, on: context)
+            try await openAPS.processDetermination(determination, enactedAt: enactedAt, uploadedToNS: uploaded, on: context)
             // `ingest` sorts the uploads once the batch is in
         case let .tdd(tdd):
             await tddStorage.storeTDD(
