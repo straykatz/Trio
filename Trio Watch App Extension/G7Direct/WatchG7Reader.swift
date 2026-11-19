@@ -88,7 +88,6 @@ import WatchKit
     @ObservationIgnored private var peripheralIdentifier: UUID?
     private let defaults = UserDefaults.standard
     @ObservationIgnored private var heldBluetoothTask: WKRefreshBackgroundTask?
-    @ObservationIgnored private var completedBluetoothTasks: [WKRefreshBackgroundTask] = []
 
     private static let historyDuration = TimeInterval(hours: 12)
     /// A reading this old still shows on the watch face.
@@ -711,12 +710,7 @@ import WatchKit
 
     private func complete(_ task: WKRefreshBackgroundTask) {
         // Completing a task twice throws inside WatchKit.
-        guard !completedBluetoothTasks.contains(where: { $0 === task }) else { return }
-        completedBluetoothTasks.append(task)
-        if completedBluetoothTasks.count > 64 {
-            completedBluetoothTasks.removeFirst(16)
-        }
-        task.setTaskCompletedWithSnapshot(false)
+        TrioWatchAppDelegate.completeOnce(task)
     }
 
     // MARK: - Persistence helpers

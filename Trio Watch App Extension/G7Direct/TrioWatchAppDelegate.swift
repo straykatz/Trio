@@ -13,7 +13,6 @@ final class TrioWatchAppDelegate: NSObject, WKApplicationDelegate {
     /// Untethered wakes are held long enough for one loop cycle and the G7's re-connect.
     private static let untetheredBluetoothHold: TimeInterval = 25
     /// Kept, not just their identities: WatchKit can hand a task over again, and completing one twice crashes.
-    private var completed: [WKRefreshBackgroundTask] = []
     /// Untethered: one task held per wake. WatchKit delivers one for every Bluetooth message, dozens a second
     /// while the sensor pairs; the rest are completed on arrival (EJM0 b644da1).
     private var heldUntetheredTask: WKRefreshBackgroundTask?
@@ -161,9 +160,18 @@ final class TrioWatchAppDelegate: NSObject, WKApplicationDelegate {
     }
 
     private func completeOnce(_ task: WKRefreshBackgroundTask) {
-        guard !completed.contains(where: { $0 === task }) else { return }
-        completed.append(task)
-        if completed.count > 128 { completed.removeFirst(32) }
+        Self.completeOnce(task)
+    }
+
+    /// Every task completed, the delegate's and the reader's, held weakly and never dropped while a task lives: the list
+    /// of 128 let a burst of wakes push out a task still held, and its hold's end completed it a second time, which
+    /// WatchKit answers with a crash (19 November 06:05:43, 25.6 s after its first completion; no readings until 06:33).
+    private static let completedTasks = NSHashTable<WKRefreshBackgroundTask>.weakObjects()
+
+    static func completeOnce(_ task: WKRefreshBackgroundTask) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard !completedTasks.contains(task) else { return }
+        completedTasks.add(task)
         task.setTaskCompletedWithSnapshot(false)
     }
 
