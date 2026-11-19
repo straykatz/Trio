@@ -1720,6 +1720,7 @@ extension UntetheredWatchManager: CGMManagerDelegate {
 
     /// Trio came to the front: a pairing that is due keeps it there.
     func appBecameActive() {
+        Self.logDeliveredNotifications()
         ActionNotice.clearReminders()
         watchCGMRecheckAcquisition(cgmManager)
         if isPairingSensor { keepTrioInFrontForPairing() }
@@ -2464,6 +2465,29 @@ extension UntetheredWatchManager {
 
     /// Every untethered notification's identifier starts with it, so they show with Trio open on the wrist too.
     static let notificationPrefix = "untethered."
+
+    /// Delivered notifications already in the log, by identifier and delivery time.
+    private static var loggedDeliveries: Set<String> = []
+
+    /// Each of our notifications the watch shows, once, with the time it came: whether "Not Looping" sounded while the
+    /// app couldn't run is seen only here (19 November: the watch in a Faraday bag, the planned alert not in the log).
+    /// Only those still on the screen are listed, so it runs at every wake and when Trio comes to the front.
+    static func logDeliveredNotifications() {
+        UNUserNotificationCenter.current().getDeliveredNotifications { delivered in
+            let ours = delivered
+                .filter { $0.request.identifier.hasPrefix(Self.notificationPrefix) }
+                .sorted { $0.date < $1.date }
+            DispatchQueue.main.async {
+                for notification in ours {
+                    let key = notification.request.identifier + "@\(notification.date.timeIntervalSince1970)"
+                    guard Self.loggedDeliveries.insert(key).inserted else { continue }
+                    let time = notification.date.formatted(date: .omitted, time: .standard)
+                    let title = notification.request.content.title
+                    Task { await WatchLogger.shared.log("⌚️ Notification shown at \(time): \(title)", force: true) }
+                }
+            }
+        }
+    }
 
     private func alarm(_ kind: String, title: String, body: String, every interval: TimeInterval) {
         guard (Self.lastAlarm[kind] ?? .distantPast).addingTimeInterval(interval) < Date() else { return }

@@ -1105,6 +1105,7 @@ import WatchKit
     static let sessionRefreshDelay: TimeInterval = 7 * 60
 
     func recheckCGM() {
+        Self.logDeliveredNotifications()
         watchCGMRecheckAcquisition(cgmManager)
         takePendingPhoneReading()
         checkAlarms()

@@ -345,6 +345,10 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
     /// First the watch is asked whether it still holds the pump; a watch that answers it doesn't is relieved at once.
     private static let watchSilenceAskAfter: TimeInterval = 6 * 60
     private static let watchSilenceAfter: TimeInterval = 20 * 60
+    /// The phone reads the sensor every 5 minutes: a silence reaching 20 minutes before the next reading is said at its
+    /// 20th minute, booked ahead and taken back when the watch is heard from (`WatchAppPresence.heardFromWatch`).
+    private static let watchSilenceLookahead: TimeInterval = 5 * 60
+    static let watchSilentID = "untethered.watchSilent"
     /// The phone's own reading this recent: it is within Bluetooth range of the sensor, so near the user and the watch.
     private static let phoneNearWithin: TimeInterval = 6 * 60
 
@@ -373,8 +377,9 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             debug(.watch, "Untethered: nothing from the watch for \(Int(silence / 60)) min while the phone reads the sensor: asking whether it holds the pump")
             send(.statusQuery, epoch: state.session.epoch)
         }
-        guard silence >= Self.watchSilenceAfter, watchSilenceNotifiedFor != reference else { return }
-        let minutes = Int(silence / 60)
+        let dueIn = Self.watchSilenceAfter - silence
+        guard dueIn <= Self.watchSilenceLookahead, watchSilenceNotifiedFor != reference else { return }
+        let minutes = max(Int(Self.watchSilenceAfter / 60), Int(silence / 60))
         let settings = settingsManager.settings
         if settings.nightscoutUploadWatch, settings.isUploadEnabled,
            let newest = await nightscoutManager.fetchNewestDeviceStatusDate(),
@@ -386,7 +391,11 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         // still in charge, and still the same silence, after the wait for Nightscout
         guard isWatchInCharge, watchSilenceNotifiedFor != reference else { return }
         watchSilenceNotifiedFor = reference
-        warning(.watch, "Untethered: nothing from the watch for \(minutes) min while the phone reads the sensor")
+        warning(
+            .watch,
+            "Untethered: nothing from the watch for \(Int(silence / 60)) min while the phone reads the sensor" +
+                (dueIn > 1 ? ": No Word From the Watch in \(Int(dueIn)) s unless the watch is heard from" : "")
+        )
         let content = UNMutableNotificationContent()
         content.title = String(localized: "No Word From the Watch")
         content.body = String(
@@ -395,7 +404,11 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         content.sound = .default
         content.interruptionLevel = .timeSensitive
         UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: "untethered.watchSilent", content: content, trigger: nil),
+            UNNotificationRequest(
+                identifier: Self.watchSilentID,
+                content: content,
+                trigger: dueIn > 1 ? UNTimeIntervalNotificationTrigger(timeInterval: dueIn, repeats: false) : nil
+            ),
             withCompletionHandler: nil
         )
     }
@@ -1037,6 +1050,10 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         let isIdle = state.session.isIdle
         if isIdle != wasIdle {
             wasIdle = isIdle
+            // the watch no longer has the pump: a silence notice booked ahead isn't said
+            if isIdle {
+                UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [Self.watchSilentID])
+            }
             Foundation.NotificationCenter.default.post(name: .untetheredSessionDidChange, object: nil)
         }
     }

@@ -7,6 +7,7 @@ import LoopKit
 import LoopKitUI
 import Swinject
 import UIKit
+import UserNotifications
 import WatchConnectivity
 
 /// Protocol defining the base functionality for Watch communication
@@ -24,6 +25,8 @@ enum WatchAppPresence {
         lock.lock()
         defer { lock.unlock() }
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: key)
+        // the watch spoke: a "No Word From the Watch" booked ahead for this silence isn't said
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [UntetheredPhoneManager.watchSilentID])
     }
 
     static var lastHeard: Date? {
