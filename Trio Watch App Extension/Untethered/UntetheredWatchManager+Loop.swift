@@ -1406,11 +1406,12 @@ extension UntetheredWatchManager: PumpManagerDelegate {
         }
         // ponytail: matched on OmnipodKit's disconnect line, as the sensor's link errors above; a link OmnipodKit
         // didn't end itself ("no reason recorded") and nothing from the pod either: watchOS ended it
-        if isSessionPump(manager as AnyObject) {
+        let isSession = isSessionPump(manager as AnyObject)
+        if isSession || manager is PumpManager {
             if message.hasPrefix("[disconnect] ours: no reason recorded"), message.contains("app in background") {
-                DispatchQueue.main.async { self.noteBackgroundLinkCut() }
+                DispatchQueue.main.async { self.noteBackgroundLinkCut(look: !isSession) }
             } else if message.hasPrefix("[connect] configured in") {
-                DispatchQueue.main.async { self.backgroundLinkCuts.removeAll() }
+                DispatchQueue.main.async { self.noteBackgroundLinkThrough() }
             }
         }
         // ponytail: matched on G7SensorKit's log line, which is the only place it reports a link error;
@@ -2023,42 +2024,118 @@ extension UntetheredWatchManager: CGMManagerDelegate {
         if WKApplication.shared().applicationState == .active { retryPodInFront() }
     }
 
-    /// Cuts this many, over at least `restartWatchSpan`, within `restartWatchWindow`, with no link through: a restart.
-    static let restartWatchCuts = 8
-    static let restartWatchSpan: TimeInterval = 4 * 60
-    static let restartWatchWindow: TimeInterval = 15 * 60
+    /// Cuts in a row, with no link through, that make the pattern: the watch stops retrying until the next reading.
+    static let cutPatternCount = 3
+    /// Cuts older than this don't count, nor does any cut before a link that got through.
+    static let cutPatternWindow: TimeInterval = 15 * 60
+    /// Until the next reading's wake, about 5 minutes on: that wake tries the pod once more.
+    static let cutPausePeriod: TimeInterval = 4 * 60
+    /// A force quit asked for this recently, in another run of Trio, and the cuts are back: it's the whole watch.
+    static let forceQuitAskedWithin: TimeInterval = 2 * 60 * 60
     /// Said again at most this often while it goes on.
     static let restartWatchRepeat: TimeInterval = 2 * 60 * 60
     static let restartWatchID = notificationPrefix + "restartWatch"
+    static let forceQuitID = notificationPrefix + "forceQuit"
+    private static let forceQuitAskedAtKey = "untethered.forceQuitAskedAt"
+    private static let forceQuitAskedPIDKey = "untethered.forceQuitAskedPID"
 
-    /// The pod's links cut from the watch's own side about a second after connecting, again and again, with Trio in
-    /// the background: a state of watchOS a restart of the watch clears, not something Trio can mend (18 November:
-    /// 46 of 50 such cuts in the morning, the sensor's link cut with them; none in the afternoon after the watch app
-    /// was restarted; 15 November: a clean night after a restart). Said once the cuts reach over two readings with no
-    /// link through, before the 14-minute hand-back.
-    func noteBackgroundLinkCut(now: Date = Date()) {
+    /// The pod's link cut from the watch's own side right after connecting, with Trio in the background: neither
+    /// OmnipodKit nor the pod ended it. Once it starts it stays for that run of Trio (18 November: 50 minutes, every
+    /// background link; a second watch: about 7 hours, through its session and every look after), and retrying only
+    /// repeats it. After `cutPatternCount` in a row the watch stops until the next reading and lets a look go. In a
+    /// session it asks for a force quit of Trio first: a new run that links again shows the state was that run's, cuts
+    /// in the new run show it's the watch's, and only then "Restart the Watch".
+    func noteBackgroundLinkCut(look: Bool = false, now: Date = Date()) {
         backgroundLinkCuts.append(now)
-        backgroundLinkCuts.removeAll { now.timeIntervalSince($0) > Self.restartWatchWindow }
-        guard data.session.phase == .active, backgroundLinkCuts.count >= Self.restartWatchCuts,
-              let first = backgroundLinkCuts.first, now.timeIntervalSince(first) >= Self.restartWatchSpan,
-              restartWatchNoticeAt.map({ now.timeIntervalSince($0) > Self.restartWatchRepeat }) ?? true
-        else { return }
-        restartWatchNoticeAt = now
+        backgroundLinkCuts.removeAll { now.timeIntervalSince($0) > Self.cutPatternWindow }
         let cuts = backgroundLinkCuts.count
+        guard cuts >= Self.cutPatternCount, (podCutPauseUntil ?? .distantPast) <= now else { return }
+        podCutPauseUntil = now.addingTimeInterval(Self.cutPausePeriod)
+        podRetryPending = nil
+        let pid = Int(ProcessInfo.processInfo.processIdentifier)
+        if look {
+            if let pump = lookingPump, !pump.isControlReleased {
+                lookAbandoned = true
+                pump.releaseControl()
+            }
+            Task {
+                await WatchLogger.shared.log(
+                    "⌚️ Untethered: fallback — the look's pod links cut by the watch itself right after connecting, \(cuts) in a row (pid \(pid)): letting go of the pod instead of retrying",
+                    force: true
+                )
+            }
+            return
+        }
         Task {
             await WatchLogger.shared.log(
-                "⌚️ Untethered: \(cuts) background pod links cut by the watch itself in \(Int(now.timeIntervalSince(first) / 60)) min, none through: asking for a restart of the watch",
+                "⌚️ Untethered: background pod links cut by the watch itself right after connecting, \(cuts) in a row (pid \(pid)): no more retries until the next reading",
                 force: true
             )
         }
+        guard data.session.phase == .active else { return }
+        let defaults = UserDefaults.standard
+        let askedAt = defaults.object(forKey: Self.forceQuitAskedAtKey) as? Date
+        let askedPID = defaults.integer(forKey: Self.forceQuitAskedPIDKey)
+        if let askedAt, now.timeIntervalSince(askedAt) < Self.forceQuitAskedWithin, askedPID != 0, askedPID != pid {
+            // the force quit was done, and the new run is cut all the same: the watch's own state
+            defaults.removeObject(forKey: Self.forceQuitAskedAtKey)
+            defaults.removeObject(forKey: Self.forceQuitAskedPIDKey)
+            guard restartWatchNoticeAt.map({ now.timeIntervalSince($0) > Self.restartWatchRepeat }) ?? true else { return }
+            restartWatchNoticeAt = now
+            Task {
+                await WatchLogger.shared.log(
+                    "⌚️ Untethered: the cuts go on in a new run of Trio (pid \(pid); the force quit was asked in pid \(askedPID) at \(askedAt.formatted(date: .omitted, time: .standard))): the watch's state, asking for a restart of the watch",
+                    force: true
+                )
+            }
+            notify(
+                id: Self.restartWatchID,
+                title: String(localized: "Restart the Watch"),
+                body: String(
+                    localized: "Bluetooth on the watch keeps cutting the pod's link right after it connects, while Trio is in the background. A restart of the watch clears this: hold the side button, then Power Off, and turn it on again. Open Trio afterwards. Until then, opening Trio gets the pod through."
+                ),
+                asksForAction: true
+            )
+            return
+        }
+        // asked in this run already: once
+        if let askedAt, askedPID == pid, now.timeIntervalSince(askedAt) < Self.forceQuitAskedWithin { return }
+        defaults.set(now, forKey: Self.forceQuitAskedAtKey)
+        defaults.set(pid, forKey: Self.forceQuitAskedPIDKey)
+        forceQuitThroughLogged = false
+        Task { await WatchLogger.shared.log("⌚️ Untethered: asking for a force quit of Trio (pid \(pid))", force: true) }
         notify(
-            id: Self.restartWatchID,
-            title: String(localized: "Restart the Watch"),
+            id: Self.forceQuitID,
+            title: String(localized: "Force Quit Trio on the Watch"),
             body: String(
-                localized: "Bluetooth on the watch keeps cutting the pod's link right after it connects, while Trio is in the background. A restart of the watch clears this: hold the side button, then Power Off, and turn it on again. Open Trio afterwards. Until then, opening Trio gets the pod through."
+                localized: "Bluetooth on the watch keeps cutting the pod's link right after it connects, while Trio is in the background. Testing: take a sysdiagnose first if you can. Then open Trio, hold the side button until the power screen, then hold the Digital Crown until Trio closes. It starts again by itself. Until then, opening Trio gets the pod through."
             ),
             asksForAction: true
         )
+    }
+
+    /// A pod link set up all the way: the cuts in a row end. The first in the background after a force quit was asked,
+    /// in a new run of Trio, says the state was the old run's.
+    func noteBackgroundLinkThrough() {
+        backgroundLinkCuts.removeAll()
+        podCutPauseUntil = nil
+        guard WKApplication.shared().applicationState != .active, !forceQuitThroughLogged,
+              let askedAt = UserDefaults.standard.object(forKey: Self.forceQuitAskedAtKey) as? Date,
+              Date().timeIntervalSince(askedAt) < Self.forceQuitAskedWithin
+        else { return }
+        let askedPID = UserDefaults.standard.integer(forKey: Self.forceQuitAskedPIDKey)
+        let pid = Int(ProcessInfo.processInfo.processIdentifier)
+        guard askedPID != 0, askedPID != pid else { return }
+        forceQuitThroughLogged = true
+        UserDefaults.standard.removeObject(forKey: Self.forceQuitAskedAtKey)
+        UserDefaults.standard.removeObject(forKey: Self.forceQuitAskedPIDKey)
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [Self.forceQuitID])
+        Task {
+            await WatchLogger.shared.log(
+                "⌚️ Untethered: a background pod link went through in a new run of Trio (pid \(pid); the force quit was asked in pid \(askedPID) at \(askedAt.formatted(date: .omitted, time: .standard))): the cuts belonged to the old run",
+                force: true
+            )
+        }
     }
 
     /// Trio came to the front after the early notice: the pod is tried at once, on the newest reading, or right after
@@ -2921,6 +2998,8 @@ extension UntetheredWatchManager {
     /// asked for by the first tester).
     func loopAgainIfPodBack(now: Date = Date()) {
         guard let pending = podRetryPending else { return }
+        // cut right after connecting, again and again: the next reading tries (`noteBackgroundLinkCut`)
+        guard (podCutPauseUntil ?? .distantPast) <= now else { return }
         let newestGlucose = data.glucose.map(\.dateString).max() ?? .distantPast
         // too late, or a newer reading loops anyway
         guard now.timeIntervalSince(pending.failedAt) < Self.podRetryWindow, newestGlucose <= pending.glucose,

@@ -120,6 +120,11 @@ import WatchKit
     @ObservationIgnored var backgroundLinkCuts: [Date] = []
     /// When "Restart the Watch" was last said.
     @ObservationIgnored var restartWatchNoticeAt: Date?
+    /// Background links cut right after connecting, again and again: no retry of the pod before this
+    /// (`noteBackgroundLinkCut`).
+    @ObservationIgnored var podCutPauseUntil: Date?
+    /// The first link through after a force quit was asked is logged once.
+    @ObservationIgnored var forceQuitThroughLogged = false
     /// The pod tried with Trio in front after that notice: waiting for a loop in flight, or running.
     @ObservationIgnored var podFrontTry: PodFrontTry?
     enum PodFrontTry { case pending, running }
@@ -2275,7 +2280,14 @@ extension UntetheredWatchManager {
         let lookLine = "⌚️ Untethered: fallback look — took the pod \(offset(started)) after the watch's reading, " +
             "\(readAt != nil ? "read it at \(offset(readAt))" : "no answer"), let go at \(offset(Date()))"
         Task { await WatchLogger.shared.log(lookLine, force: true) }
-        if lookAbandoned { return .notReached("watchOS ended the background time; the watch let go of the pod") }
+        if lookAbandoned {
+            // let go after links cut right after connecting (`noteBackgroundLinkCut`), or watchOS ended its time
+            let cut = (podCutPauseUntil ?? .distantPast) > Date()
+            return .notReached(
+                cut ? "the pod's links cut by the watch itself right after connecting; the watch let go of the pod"
+                    : "watchOS ended the background time; the watch let go of the pod"
+            )
+        }
         guard read != nil else {
             return .notReached("no answer in \(Int(Date().timeIntervalSince(started))) s")
         }
