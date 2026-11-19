@@ -77,6 +77,12 @@ public final class G7WatchAcquisition: G7AcquisitionArm {
     /// Trio: a link came up since the reader took the sensor back from untethered mode (`takeOver`).
     private var linkedSinceTakeOver = true
 
+    /// Trio: when the sensor's link last came up. A background wake has about 10 s of Bluetooth from then: pod messages
+    /// after that count toward a watchOS limit that cuts all of Trio's links (sysdiagnose, 19 November).
+    static var lastLinkUpAt: Date?
+    /// Trio: called on the bluetooth queue as the link comes up, so the pod can be reached at once.
+    static var onLinkUp: (() -> Void)?
+
     init(manager: G7BluetoothManager) {
         self.manager = manager
         _ = G7WatchAcquisition.buildChanged   // noted at every launch, restored or not
@@ -213,6 +219,8 @@ public final class G7WatchAcquisition: G7AcquisitionArm {
         let waited = lodgedAt.map { Date().timeIntervalSince($0) }
         lodged = false; lodgedAt = nil
         linkUpAt = Date()
+        G7WatchAcquisition.lastLinkUpAt = linkUpAt
+        G7WatchAcquisition.onLinkUp?()
         linkedSinceTakeOver = true
         if bootstrapPass { endBootstrapPass(reason: "connected") }
         watchLog(String(format: "link up %@ %@ · pid %d", peripheral.name ?? "unnamed",
