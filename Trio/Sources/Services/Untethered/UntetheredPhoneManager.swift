@@ -165,13 +165,18 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
     private var lastHandledForeignSessionAt: Date?
     private let assembler = UntetheredChunks.Assembler()
     private var endRequestTimer: Timer?
-    /// Since when the phone has asked for the pump back, and when it last reached for the pod itself meanwhile.
-    private var endingSince: Date?
-    private var lastEndingTakeBack: Date?
+    /// When the phone first asked the watch to hand the pump back, for the session with that epoch. Kept across launches,
+    /// as iOS can restart Trio on the phone while it waits for the answer.
+    private static let handbackAskedKey = "untethered.handbackAskedAt"
+    /// When the phone last reached for the pod itself during this hand-back.
+    private var lastHandbackTakeBack: Date?
     /// Third tester (19 November): the watch, out of reach, let go of the pod a few minutes after the hand-back request,
-    /// but its answer reached the phone 18 minutes later, and neither looped meanwhile. After this long the phone reaches
-    /// for the pod itself, as Take Back Now does, at each reading until it has it.
-    private static let endingTakeBackDelay: TimeInterval = 6 * 60
+    /// but its answer reached the phone 18 minutes later, and neither looped meanwhile. Once the hand-back has been asked
+    /// for this long, and nothing has come from the watch for this long either, the phone reaches for the pod itself, as
+    /// Take Back the Pump Now does. A watch still sending messages is still handing back and is left to finish.
+    private static let handbackSilence: TimeInterval = 6 * 60
+    /// Between two reaches for the pod while the hand-back stays unanswered.
+    private static let handbackRetry: TimeInterval = 4 * 60
     /// How long a normal hand-back waits for the watch's last records before the audit judges the pump.
     private static let historyWait: TimeInterval = 60
     /// Between reads of a returned pump: each read already waits for the link (20 s, 45 s with the eager connect).
@@ -1090,7 +1095,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             endAnswerWait()
         }
         if phase == .ending {
-            if endingSince == nil { endingSince = Date() }
+            noteHandbackAsked()
             // repeated until the watch hands back; it may be reachable without a reachability change
             if endRequestTimer == nil {
                 send(.endRequest, epoch: state.session.epoch)
@@ -1102,8 +1107,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         } else {
             endRequestTimer?.invalidate()
             endRequestTimer = nil
-            endingSince = nil
-            lastEndingTakeBack = nil
+            clearHandbackAsked()
         }
         Task { await scheduleLinkedOverrideCheck() }
     }
@@ -1120,24 +1124,51 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
     @MainActor private func tickWhileWaiting() async {
         let phase = state.session.phase
         if phase == .ending {
-            await takeBackAfterLongEnding()
+            await takeBackIfHandbackUnanswered()
             return
         }
         guard phase == .preparing || phase == .starting else { return }
         await apply(.tick)
     }
 
-    /// The hand-back asked for long enough: the phone reaches for the pod itself (`forceTakeBack`), which takes it only with
-    /// a pod link, and otherwise leaves the watch running and tries again at a later reading.
-    @MainActor private func takeBackAfterLongEnding() async {
+    /// When this session's hand-back was first asked for; nil when none was, or for another session.
+    private var handbackAskedAt: Date? {
+        guard let saved = UserDefaults.standard.dictionary(forKey: Self.handbackAskedKey),
+              saved["epoch"] as? Int == state.session.epoch,
+              let at = saved["at"] as? Double
+        else { return nil }
+        return Date(timeIntervalSince1970: at)
+    }
+
+    private func noteHandbackAsked() {
+        guard handbackAskedAt == nil else { return }
+        UserDefaults.standard.set(
+            ["epoch": state.session.epoch, "at": Date().timeIntervalSince1970],
+            forKey: Self.handbackAskedKey
+        )
+    }
+
+    private func clearHandbackAsked() {
+        lastHandbackTakeBack = nil
+        // a locked state reads as idle: the saved time stays until the real state can be read
+        guard !UntetheredGate.isLocked, UserDefaults.standard.object(forKey: Self.handbackAskedKey) != nil else { return }
+        UserDefaults.standard.removeObject(forKey: Self.handbackAskedKey)
+    }
+
+    /// The hand-back was asked for at least `handbackSilence` ago and nothing has come from the watch for as long: the
+    /// phone reaches for the pod itself (`forceTakeBack`), which takes it only with a pod link and otherwise leaves the
+    /// watch running; a later reading tries again, at most every `handbackRetry`.
+    @MainActor private func takeBackIfHandbackUnanswered() async {
+        guard state.session.phase == .ending, let asked = handbackAskedAt, !isReachingPod else { return }
         let now = Date()
-        guard let since = endingSince, now.timeIntervalSince(since) >= Self.endingTakeBackDelay, !isReachingPod,
-              now.timeIntervalSince(lastEndingTakeBack ?? .distantPast) >= 4 * 60
+        let quietSince = max(asked, WatchAppPresence.lastHeard ?? .distantPast)
+        guard now.timeIntervalSince(quietSince) >= Self.handbackSilence,
+              now.timeIntervalSince(lastHandbackTakeBack ?? .distantPast) >= Self.handbackRetry
         else { return }
-        lastEndingTakeBack = now
+        lastHandbackTakeBack = now
         info(
             .watch,
-            "Untethered: no hand-back from the watch \(Int(now.timeIntervalSince(since) / 60)) min after asking: the phone reaches for the pod itself"
+            "Untethered: hand-back asked \(Int(now.timeIntervalSince(asked) / 60)) min ago, nothing from the watch for \(Int(now.timeIntervalSince(quietSince) / 60)) min: the phone reaches for the pod itself"
         )
         await forceTakeBack()
     }
