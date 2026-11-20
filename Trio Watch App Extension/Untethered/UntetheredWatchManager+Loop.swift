@@ -382,7 +382,7 @@ extension UntetheredWatchManager {
             // Test (19 November): pod messages past ~10 s from the sensor's link-up count toward a watchOS limit that
             // cuts all of Trio's links near 200. After a temp basal late in a background wake, the SMB waits for the
             // next reading, which works it out again; only once in a row, so no SMB waits longer than one reading.
-            let sinceLinkUp = G7WatchAcquisition.lastLinkUpAt.map { Date().timeIntervalSince($0) } ?? .infinity
+            let sinceLinkUp = sensorLinkUpAt.map { Date().timeIntervalSince($0) } ?? .infinity
             let deferredLast = smbDeferredAt.map { Date().timeIntervalSince($0) < 8 * 60 } ?? false
             if sentTemp, !deferredLast, sinceLinkUp > 5, sinceLinkUp < 60,
                WKApplication.shared().applicationState != .active
@@ -1441,6 +1441,15 @@ extension UntetheredWatchManager: PumpManagerDelegate {
             Task { await WatchLogger.shared.log(look ? "⌚️ Device (look): \(message)" : "⌚️ Device: \(message)", force: look) }
         }
         DispatchQueue.main.async { self.noteSensorPairingEvent(message) }
+        // the sensor's link is up: the wake's 10 s of Bluetooth start now (G7SensorKit's G7WatchAcquisition says so
+        // only in its log, as the app's own G7 reader has its own copy)
+        if message.hasPrefix("[g7-watch] link up") {
+            let at = Date()
+            DispatchQueue.main.async {
+                self.sensorLinkUpAt = at
+                self.prefetchPodData()
+            }
+        }
         if message.hasPrefix("Pod connected"), isSessionPump(manager as AnyObject) {
             DispatchQueue.main.async { self.loopAgainIfPodBack() }
         }
