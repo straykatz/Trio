@@ -165,6 +165,13 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
     private var lastHandledForeignSessionAt: Date?
     private let assembler = UntetheredChunks.Assembler()
     private var endRequestTimer: Timer?
+    /// Since when the phone has asked for the pump back, and when it last reached for the pod itself meanwhile.
+    private var endingSince: Date?
+    private var lastEndingTakeBack: Date?
+    /// Third tester (19 November): the watch, out of reach, let go of the pod a few minutes after the hand-back request,
+    /// but its answer reached the phone 18 minutes later, and neither looped meanwhile. After this long the phone reaches
+    /// for the pod itself, as Take Back Now does, at each reading until it has it.
+    private static let endingTakeBackDelay: TimeInterval = 6 * 60
     /// How long a normal hand-back waits for the watch's last records before the audit judges the pump.
     private static let historyWait: TimeInterval = 60
     /// Between reads of a returned pump: each read already waits for the link (20 s, 45 s with the eager connect).
@@ -948,6 +955,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             endAnswerWait()
         }
         if phase == .ending {
+            if endingSince == nil { endingSince = Date() }
             // repeated until the watch hands back; it may be reachable without a reachability change
             if endRequestTimer == nil {
                 send(.endRequest, epoch: state.session.epoch)
@@ -959,6 +967,8 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         } else {
             endRequestTimer?.invalidate()
             endRequestTimer = nil
+            endingSince = nil
+            lastEndingTakeBack = nil
         }
         Task { await scheduleLinkedOverrideCheck() }
     }
@@ -974,8 +984,27 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
     /// the front gives it its tick as well.
     @MainActor private func tickWhileWaiting() async {
         let phase = state.session.phase
+        if phase == .ending {
+            await takeBackAfterLongEnding()
+            return
+        }
         guard phase == .preparing || phase == .starting else { return }
         await apply(.tick)
+    }
+
+    /// The hand-back asked for long enough: the phone reaches for the pod itself (`forceTakeBack`), which takes it only with
+    /// a pod link, and otherwise leaves the watch running and tries again at a later reading.
+    @MainActor private func takeBackAfterLongEnding() async {
+        let now = Date()
+        guard let since = endingSince, now.timeIntervalSince(since) >= Self.endingTakeBackDelay, !isReachingPod,
+              now.timeIntervalSince(lastEndingTakeBack ?? .distantPast) >= 4 * 60
+        else { return }
+        lastEndingTakeBack = now
+        info(
+            .watch,
+            "Untethered: no hand-back from the watch \(Int(now.timeIntervalSince(since) / 60)) min after asking: the phone reaches for the pod itself"
+        )
+        await forceTakeBack()
     }
 
     /// A refused pod command exposes the watch's newer EAP session before WatchConnectivity
