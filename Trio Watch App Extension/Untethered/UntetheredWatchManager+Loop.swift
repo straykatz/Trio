@@ -1,4 +1,5 @@
 import Foundation
+import OmnipodKit
 import HealthKit
 import LoopKit
 import SwiftUI
@@ -357,11 +358,13 @@ extension UntetheredWatchManager {
         // a pod command watchOS can freeze half-way is what leaves the pod link stuck (2026-10-19 08:09,
         // 2026-10-20 02:25 and 12:11): none starts once the loop has no background time left
         guard !loopHoldExpired else { throw UntetheredWatchError.noBackgroundTime }
+        var sentTemp = false
         if let rate = determination.rate, let duration = determination.duration {
             try await pump.enactTempBasal(
                 unitsPerHour: rate.nearestDouble,
                 for: TimeInterval(truncating: duration as NSNumber) * 60
             )
+            sentTemp = true
         }
         // as the phone: no SMB on top of a bolus still running, e.g. the meal bolus just started
         if data.grant?.dosingMode == dosingMode, let units = determination.units, units > 0,
@@ -370,8 +373,22 @@ extension UntetheredWatchManager {
             guard !loopHoldExpired else { throw UntetheredWatchError.noBackgroundTime }
             guard mayDose else { throw UntetheredWatchError.noPump }
             try await pump.enactBolus(units: units.nearestDouble, automatic: true)
+            return true
         }
+        if !sentTemp { await readPodAheadOfNextWake(pump) }
         return true
+    }
+
+    /// Test (20 November, first tester): a background wake that sends the pod nothing skips the pod read (its data
+    /// is under 6 minutes old), so the next wake's is 10 minutes old; when that wake changes the temp basal it needs a
+    /// read, a cancel and the new temp, 6 pod messages, and each such wake added 14 or 15 to the watchOS count that
+    /// cuts all of Trio's links near 200. Wakes of 2 or 4 messages added nothing. The quiet wake reads instead.
+    private func readPodAheadOfNextWake(_ pump: PumpManager) async {
+        guard WKApplication.shared().applicationState != .active, !loopHoldExpired, mayDose,
+              let omnipod = pump as? OmniPumpManager else { return }
+        _ = await withCheckedContinuation { (continuation: CheckedContinuation<Date?, Never>) in
+            omnipod.readStatusIfOlder(than: 2 * 60) { continuation.resume(returning: $0) }
+        }
     }
 
     /// The watch may still command the pod: the session runs (a hand-back until its last stage) and the phone isn't
