@@ -188,13 +188,20 @@ struct WatchG7DetailsView: View {
                             + (coverage.filledIn > 0 ? " · +\(coverage.filledIn) filled" : "")
                     )
                     row(String(localized: "Units", comment: "Watch sensor details label"), reader.units)
+                    // the watch's own newest reading: its reader's, or in watch mode the session's from the sensor
+                    let watchReading = [reader.latest?.date, UntetheredWatchManager.shared.ownSessionReadingDate]
+                        .compactMap { $0 }.max()
                     row(
-                        String(localized: "iPhone", comment: "Watch sensor details label: age of the last update from the phone"),
-                        reader.lastPhoneContact.map { minutesAgo($0) } ?? "–"
+                        String(localized: "Watch BG", comment: "Watch sensor details label: age of the watch's own newest glucose"),
+                        watchReading.map { minutesAgo($0) } ?? "–"
                     )
                     row(
                         String(localized: "iPhone BG", comment: "Watch sensor details label: age of the phone's newest glucose"),
                         reader.phoneGlucoseDate.map { minutesAgo($0) } ?? "–"
+                    )
+                    row(
+                        String(localized: "iPhone link", comment: "Watch sensor details label: age of the last update from the phone"),
+                        reader.lastPhoneContact.map { minutesAgo($0) } ?? "–"
                     )
                     if let problem = reader.sensorProblem {
                         row(String(localized: "State", comment: "Watch sensor details label: sensor state without a reading"), problem)
@@ -260,6 +267,6 @@ struct WatchG7DetailsView: View {
 
     private func minutesAgo(_ date: Date) -> String {
         let minutes = max(0, Int(Date().timeIntervalSince(date) / 60))
-        return String(localized: "\(minutes) min ago", comment: "Watch sensor details: minutes since the last iPhone update")
+        return String(localized: "\(minutes) min ago", comment: "Watch sensor details: minutes since a reading or an iPhone update")
     }
 }

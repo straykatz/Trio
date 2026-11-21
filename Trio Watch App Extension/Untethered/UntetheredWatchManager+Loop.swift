@@ -2165,6 +2165,11 @@ extension UntetheredWatchManager: CGMManagerDelegate {
         guard isActive, case let .newData(samples) = readingResult, !samples.isEmpty else { return }
         Self.trace("reading in: \(samples.count) sample(s), newest from \(samples.map(\.date).max()?.formatted(date: .omitted, time: .standard) ?? "-")")
         sensorPairingDone()
+        if let newest = samples.filter({ !$0.wasUserEntered }).map(\.date).max() {
+            DispatchQueue.main.async {
+                if newest > (self.ownSessionReadingDate ?? .distantPast) { self.ownSessionReadingDate = newest }
+            }
+        }
         takeReadings(samples.filter { !$0.wasUserEntered }.map {
             SessionReading(
                 date: $0.date,
