@@ -418,9 +418,13 @@ extension UntetheredWatchManager {
 
     /// Test (19 November): the pod read at the sensor's link-up instead of after the reading, about 1.5 s earlier in
     /// the ~10 s of Bluetooth watchOS gives a background wake. The loop of that reading takes its result.
+    /// Only right after a reading of its own: after a gap the phone may have taken the pod meanwhile (second tester,
+    /// 21 November: back from 18 min out of reach, the watch logged in to the pod at the link-up, before the phone's
+    /// take-back reached it seconds later; the phone saw another controller on its pod and refused it).
     func prefetchPodData() {
         guard data.session.phase == .active, !data.podEnded, mayDose, !isLooping, let pump = pumpManager,
               WKApplication.shared().applicationState != .active,
+              Date().timeIntervalSince(ownReadingAt ?? .distantPast) < Self.prefetchAfterReadingWithin,
               podPrefetch.map({ Date().timeIntervalSince($0.at) > 60 }) ?? true else { return }
         let task = Task { @MainActor in
             await withCheckedContinuation { (continuation: CheckedContinuation<Date?, Never>) in
@@ -2289,6 +2293,8 @@ extension UntetheredWatchManager: CGMManagerDelegate {
     }
 
     static let ownReadingAtKey = "untethered.ownReadingAt"
+    /// The pod read at the link-up only when the watch's last reading of its own is this recent: one missed reading at most.
+    static let prefetchAfterReadingWithin: TimeInterval = 11 * 60
     /// The newest reading the watch read from the sensor itself in this session, or the session's start.
     var ownReadingAt: Date? { UserDefaults.standard.object(forKey: Self.ownReadingAtKey) as? Date }
     /// No reading of its own for this long while looping on the phone's: the watch's sensor link is broken, and
