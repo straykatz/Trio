@@ -1621,6 +1621,8 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         }
         pumpReturnAnswered = false
         let control = apsManager.pumpManager as? ExclusiveDeviceControl
+        // the pod being read back; once it's changed on the phone there is nothing to read
+        let returningPod = (apsManager.pumpManager as? OmniPumpManager)?.state.podState?.activatedAt
         control?.takeControl()
         debug(.watch, "Untethered: reading the pump back")
         // the reconnect keeps running with the phone in a pocket, rather than waiting for the next wake
@@ -1634,7 +1636,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             try? await Task.sleep(nanoseconds: Self.pumpEscalateAfter)
             // not once the watch holds the pump again: escalating lifts the release (Ponytail's review, 15 November)
             guard !Task.isCancelled, let control, !control.isControlReady, self.state.pumpReturnPending,
-                  !control.isControlReleased else { return }
+                  !control.isControlReleased, !self.podChanged(since: returningPod) else { return }
             let outcome = control.escalateTakeControl() ?? "nothing to escalate"
             debug(.watch, "Untethered: no pump link after 12 s, escalating: \(outcome)")
         }
@@ -1642,7 +1644,9 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         let started = Date()
         var attempts = 0
         var bannerShown = false
-        while state.pumpReturnPending, !state.podEndedOnWatch, !(await odometer.refreshDeliveredUnits()) {
+        while state.pumpReturnPending, !state.podEndedOnWatch, !podChanged(since: returningPod),
+              !(await odometer.refreshDeliveredUnits())
+        {
             attempts += 1
             debug(.watch, "Untethered: the pump did not answer yet (attempt \(attempts)), retrying")
             // with Bluetooth off nothing reaches the pod, and the watch has let go: said at once, as nobody doses
@@ -1664,6 +1668,15 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         }
         if bannerShown { setError(nil) }
         control?.endTakeEscalation()
+        // Second tester, 21 November: the pod was changed on the phone while it read the old one back; the reads, every
+        // 2 s, ran on the new pod's connection through its setup, and its cannula insertion was refused. A pod gone or
+        // replaced has nothing to read back: the return ends, and the new pod starts on the phone.
+        if podChanged(since: returningPod) {
+            UntetheredGate.update { $0.pumpReturnPending = false }
+            publish()
+            debug(.watch, "Untethered: the pod was changed on the phone during the pump return; nothing to read back")
+            return
+        }
         // the watch holds the pump again (`.releasePump`): nothing to read back
         guard state.pumpReturnPending else {
             debug(.watch, "Untethered: pump return given up, the watch holds the pump")
@@ -1728,6 +1741,12 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         if (glucoseStorage.lastGlucoseDate() ?? .distantPast) > apsManager.lastLoopDate {
             apsManager.heartbeat(date: Date())
         }
+    }
+
+    /// The pod read back at the start of a pump return is no longer the phone's: discarded, deactivated or replaced.
+    private func podChanged(since pod: Date?) -> Bool {
+        guard let pod else { return false }
+        return (apsManager.pumpManager as? OmniPumpManager)?.state.podState?.activatedAt != pod
     }
 
     /// The scheduled basal rate now, as the hand-over's "high temp" test reads it.
