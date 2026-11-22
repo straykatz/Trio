@@ -187,6 +187,10 @@ import WatchKit
     @ObservationIgnored private var standingGrantRequestedAt: Date?
 
     var isActive: Bool { data.session.phase == .active || data.session.phase == .ending }
+    /// A loop runs, or a sensor wake began under 30 s ago: Bluetooth work whose CPU a WatchConnectivity wake would count.
+    var isBluetoothWakeUnderway: Bool {
+        isLooping || sensorLinkUpAt.map { Date().timeIntervalSince($0) < 30 } ?? false
+    }
 
     private init() {
         // every stored property is set before a method of self runs: Swift refuses `adoptSavedState()` first

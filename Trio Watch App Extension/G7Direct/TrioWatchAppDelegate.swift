@@ -180,6 +180,11 @@ final class TrioWatchAppDelegate: NSObject, WKApplicationDelegate {
     /// second apart reached exactly that. Now it lets go after 10 s at most, and at once when the system ends it
     /// early; what is still pending comes with the next wake.
     private static let connectivityHold: TimeInterval = 10
+    /// While the watch has the pump: the same wake also allows Trio only 2 s of CPU, and a loop running meanwhile counts
+    /// toward it (22 November 07:35, first tester: "Exhausted CPU time allowance of 2.00 seconds", ended mid-session
+    /// as a sensor wake's loop ran with content still pending). Held 1 s at most then, and not at all while a sensor
+    /// wake or a loop is under way; what is still pending comes with the next wake.
+    private static let connectivityHoldUntethered: TimeInterval = 1
 
     private func completeWhenConnectivityIsDelivered(_ task: WKWatchConnectivityRefreshBackgroundTask, attempt: Int) {
         if attempt == 0 {
@@ -192,8 +197,11 @@ final class TrioWatchAppDelegate: NSObject, WKApplicationDelegate {
             }
         }
         let session = WCSession.default
-        if session.activationState != .activated || !session.hasContentPending
-            || TimeInterval(attempt) >= Self.connectivityHold
+        let untethered = UntetheredWatchManager.shared
+        let busy = untethered.isActive && untethered.isBluetoothWakeUnderway
+        let hold = untethered.isActive ? Self.connectivityHoldUntethered : Self.connectivityHold
+        if session.activationState != .activated || !session.hasContentPending || busy
+            || TimeInterval(attempt) >= hold
         {
             if session.hasContentPending {
                 Task { await WatchLogger.shared.log("⌚️ Connectivity wake let go after \(attempt) s with content still pending", force: true) }
