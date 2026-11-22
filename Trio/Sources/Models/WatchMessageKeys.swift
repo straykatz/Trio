@@ -99,6 +99,8 @@ enum WatchMessageKeys {
     static let pumpName = "pumpName"
     static let pumpReservoir = "pumpReservoir"
     static let pumpBatteryPercent = "pumpBatteryPercent"
+    /// What a start without the iPhone needs, as the watch sees it (`readinessReport`), sent when it changes.
+    static let watchReadiness = "watchReadiness"
     static let pumpExpiresAt = "pumpExpiresAt"
     static let pumpActivatedAt = "pumpActivatedAt"
     static let pumpStatusMessage = "pumpStatusMessage"

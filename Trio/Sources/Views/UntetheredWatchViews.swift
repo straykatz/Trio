@@ -101,6 +101,10 @@ struct UntetheredSettingsSection: View {
 
             if manager.isWatchInCharge {
                 Button("Take Back the Pump Now", role: .destructive) { confirmForce = true }
+            } else {
+                TimelineView(.periodic(from: .now, by: 30)) { _ in
+                    UntetheredReadinessRow(readiness: manager.readiness)
+                }
             }
         }
         .listRowBackground(Color.chart)
@@ -110,6 +114,40 @@ struct UntetheredSettingsSection: View {
             Text("The watch hands the pump back as soon as it is reachable.")
         }
         .untetheredForceDialog(isPresented: $confirmForce, manager: manager)
+    }
+}
+
+/// Whether the watch could start by itself if the iPhone were left behind now.
+struct UntetheredReadinessRow: View {
+    let readiness: UntetheredPhoneManager.Readiness
+
+    var body: some View {
+        switch readiness {
+        case .off:
+            EmptyView()
+        case .ready:
+            Label("Ready for a forgotten iPhone", systemImage: "checkmark.circle.fill")
+                .font(.footnote)
+                .foregroundStyle(Color.loopGreen)
+        case let .unknown(hours):
+            Label(unknownText(hours), systemImage: "questionmark.circle")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        case let .missing(missing):
+            VStack(alignment: .leading, spacing: 4) {
+                Label("Not ready for a forgotten iPhone", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                ForEach(missing, id: \.self) { Text(verbatim: "• " + $0) }
+            }
+            .font(.footnote)
+        }
+    }
+
+    private func unknownText(_ hours: Int?) -> String {
+        guard let hours else {
+            return String(localized: "Ready for a forgotten iPhone? No word from the watch yet: open Trio on it.")
+        }
+        return String(localized: "Ready for a forgotten iPhone? No word from the watch for \(hours) h.")
     }
 }
 

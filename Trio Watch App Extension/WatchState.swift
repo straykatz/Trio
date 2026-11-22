@@ -1060,6 +1060,9 @@ import WatchConnectivity
             }
         }
 
+        // what a start without the iPhone needs, back to the phone for its readiness line
+        reportReadinessIfChanged()
+
         // Sensor details, alarm thresholds and units for the watch's own G7 reading.
         WatchG7Reader.shared.updateFromPhone(message)
         // a session the fallback started goes back once the phone sends fresh readings again
@@ -1073,6 +1076,36 @@ import WatchConnectivity
                 colorScheme: message["complicationColorScheme"] as? String,
                 targetMgDL: message["complicationTargetMgDL"] as? Double
             )
+        }
+    }
+}
+
+// MARK: - Ready for a forgotten iPhone
+
+extension WatchState {
+    /// The last readiness sent to the phone, without the time of its copy.
+    private static var lastReadinessReport: (readiness: NSDictionary, at: Date)?
+
+    /// Sends what a start without the iPhone needs (`readinessReport`) when it changed or every 30 minutes, for the
+    /// iPhone's "ready for a forgotten iPhone" line. As userInfo: queued, only the newest kept.
+    func reportReadinessIfChanged(now: Date = Date()) {
+        let readiness = UntetheredWatchManager.shared.readinessReport
+        var compared = readiness
+        compared.removeValue(forKey: UntetheredWatchManager.readinessGrantKey)
+        let comparable = NSDictionary(dictionary: compared)
+        if let last = Self.lastReadinessReport, last.readiness.isEqual(comparable), now.timeIntervalSince(last.at) < 30 * 60 {
+            return
+        }
+        guard WCSession.isSupported(), WCSession.default.activationState == .activated else { return }
+        Self.lastReadinessReport = (comparable, now)
+        WCTransfers.run {
+            let session = WCSession.default
+            for transfer in session.outstandingUserInfoTransfers
+                where transfer.userInfo[WatchMessageKeys.watchReadiness] != nil
+            {
+                transfer.cancel()
+            }
+            session.transferUserInfo([WatchMessageKeys.watchReadiness: readiness])
         }
     }
 }

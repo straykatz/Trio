@@ -30,6 +30,8 @@ import WatchKit
 
     /// The watch's own key for the sensor, from its own pairing.
     private(set) var hasWatchKey: Bool
+    /// The sensor has answered the watch with its present key: a start without the iPhone can read it.
+    private(set) var sensorAnswered: Bool
 
     // MARK: - Live state
 
@@ -105,6 +107,7 @@ import WatchKit
         static let low = "watchG7.lowMgDL"
         static let high = "watchG7.highMgDL"
         static let sharedKey = "watchG7.sharedKey"
+        static let sensorAnswered = "watchG7.sensorAnswered"
         static let peripheralIdentifier = "watchG7.peripheralIdentifier"
         static let history = "watchG7.history"
         static let log = "watchG7.log"
@@ -133,6 +136,7 @@ import WatchKit
         highMgDL = defaults.object(forKey: Key.high) as? Double
         sharedKey = defaults.data(forKey: Key.sharedKey)
         hasWatchKey = defaults.data(forKey: Key.sharedKey) != nil
+        sensorAnswered = defaults.bool(forKey: Key.sensorAnswered)
         peripheralIdentifier = defaults.string(forKey: Key.peripheralIdentifier).flatMap(UUID.init(uuidString:))
         lastPhoneContact = defaults.object(forKey: Key.lastPhoneContact) as? Date
         phoneGlucoseDate = defaults.object(forKey: Key.phoneGlucoseDate) as? Date
@@ -716,10 +720,17 @@ import WatchKit
     // MARK: - Persistence helpers
 
     private func setSharedKey(_ key: Data?) {
+        if key != sharedKey { setSensorAnswered(false) }
         sharedKey = key
         hasWatchKey = key != nil
         defaults.set(key, forKey: Key.sharedKey)
         if let key { WatchG7SlotKey.record(key, peripheral: peripheralIdentifier) }
+    }
+
+    private func setSensorAnswered(_ answered: Bool) {
+        guard answered != sensorAnswered else { return }
+        sensorAnswered = answered
+        defaults.set(answered, forKey: Key.sensorAnswered)
     }
 
     private func setPeripheralIdentifier(_ identifier: UUID?) {
@@ -987,6 +998,8 @@ import WatchKit
 
     func session(_: WatchG7Session, didRead message: WatchG7GlucoseMessage, receivedAt: Date) {
         DispatchQueue.main.async {
+            // the sensor answered the watch's own key: a start without the iPhone can read it
+            if self.hasWatchKey { self.setSensorAnswered(true) }
             guard message.hasReliableGlucose, let glucose = message.glucose else {
                 let problem = String(describing: message.algorithmState)
                 self.sensorProblem = problem

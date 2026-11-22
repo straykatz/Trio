@@ -1148,6 +1148,10 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
             Self.storeWatchPushToken(token)
             return
         }
+        if let readiness = userInfo[WatchMessageKeys.watchReadiness] as? [String: Any] {
+            WatchReadiness.store(readiness)
+            return
+        }
         if userInfo["watchLogs"] != nil {
             Self.confirmWatchLogs(WatchLogIngest.acceptLegacy(userInfo))
         }

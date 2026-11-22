@@ -1126,6 +1126,7 @@ import WatchKit
     func recheckCGM() {
         Self.logDeliveredNotifications()
         watchCGMRecheckAcquisition(cgmManager)
+        WatchState.shared.reportReadinessIfChanged()
         takePendingPhoneReading()
         checkAlarms()
         checkPodLink()
@@ -2331,6 +2332,27 @@ extension UntetheredWatchManager {
             ),
             asksForAction: true
         )
+    }
+
+    // MARK: - Ready for a forgotten iPhone
+
+    static let readinessGrantKey = "grantIssuedAt"
+
+    /// What a start without the iPhone needs, sent with the battery report for the iPhone's "ready for a forgotten
+    /// iPhone" line (22 November: a start without the iPhone fails when the watch never met the pod or the sensor,
+    /// and nothing says so until the iPhone is left behind). The time of the copy tells the iPhone which pod it was.
+    var readinessReport: [String: Any] {
+        let reader = WatchG7Reader.shared
+        var report: [String: Any] = [
+            "readerOn": reader.isEnabled,
+            "sensorName": reader.sensorName ?? "",
+            "sensorReady": reader.hasWatchKey && reader.sensorAnswered
+        ]
+        if let issuedAt = data.standingGrantIssuedAt, data.standingGrant != nil {
+            report[Self.readinessGrantKey] = issuedAt.timeIntervalSince1970
+            report["podKnown"] = !standingGrantPodUnknown
+        }
+        return report
     }
 
     // MARK: - Meeting a new pod
