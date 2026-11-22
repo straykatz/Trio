@@ -881,8 +881,7 @@ struct UntetheredGlanceView: View {
                 TimelineView(.periodic(from: .now, by: 30)) { context in
                     VStack(spacing: 4) {
                         row(0, now: context.date)
-                        middle(now: context.date)
-                            .frame(maxHeight: .infinity)
+                        middle(now: context.date, height: middleHeight(screen: screen.size.height))
                         row(1, now: context.date)
                         if !isLuminanceReduced {
                             Text("Tap for Trio", comment: "Hint at the bottom of Extended Watch Mode's minimal screen")
@@ -910,6 +909,23 @@ struct UntetheredGlanceView: View {
 
     // MARK: - Layout
 
+    private static let rowHeight: CGFloat = 36
+    private static let hintHeight: CGFloat = 12
+    /// The large glucose with its time and delta, above the chart.
+    private static let glucoseHeaderHeight: CGFloat = 40
+
+    private func rowHeight(_ index: Int) -> CGFloat {
+        state.glanceLayout.row(index).allSatisfy { $0.item == nil } ? 0 : Self.rowHeight
+    }
+
+    /// The middle's height worked out from the screen's, not left to the layout: given only the room left, the chart
+    /// still came out as a thin strip (17 and 22 November, Extended Mode).
+    private func middleHeight(screen: CGFloat) -> CGFloat {
+        let hint = isLuminanceReduced ? 0 : Self.hintHeight
+        let gaps: CGFloat = isLuminanceReduced ? 2 : 3
+        return max(40, screen - rowHeight(0) - rowHeight(1) - hint - gaps * 4 - 2)
+    }
+
     /// Each element as wide as its slots.
     private func row(_ index: Int, now: Date) -> some View {
         let elements = state.glanceLayout.row(index)
@@ -925,22 +941,28 @@ struct UntetheredGlanceView: View {
                 }
             }
         }
-        .frame(height: elements.allSatisfy { $0.item == nil } ? 0 : 36)
+        .frame(height: rowHeight(index))
     }
 
-    @ViewBuilder private func middle(now: Date) -> some View {
+    @ViewBuilder private func middle(now: Date, height: CGFloat) -> some View {
         switch state.glanceLayout.slots[WatchGlanceLayout.center] {
         case .glucoseLarge:
             glucose(size: 58, now: now)
+                .frame(height: height)
         case .glucoseChart:
             VStack(spacing: 0) {
                 glucose(size: 30, now: now)
+                    .frame(height: Self.glucoseHeaderHeight)
                 chart
+                    .frame(height: max(30, height - Self.glucoseHeaderHeight))
             }
+            .frame(height: height)
         case .chart:
             chart
+                .frame(height: height)
         default:
             Color.clear
+                .frame(height: height)
         }
     }
 
