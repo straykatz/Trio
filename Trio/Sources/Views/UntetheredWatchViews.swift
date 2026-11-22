@@ -209,7 +209,8 @@ struct UntetheredBannerSlot<Content: View, Banner: View>: View {
     var body: some View {
         if manager.isWatchInCharge || manager.state.pumpReturnPending {
             // by the second while the start reaches the watch, so its progress counts up
-            TimelineView(.periodic(from: .now, by: manager.isReachingWatch ? 1 : 60)) { context in
+            TimelineView(.periodic(from: .now, by: manager.isReachingWatch ? 1 : 30)) { context in
+            let silentMinutes = manager.watchSilentMinutes(now: context.date)
             banner(
                 manager.isBluetoothOff
                     ? String(localized: "⚠️ iPhone Bluetooth Off")
@@ -218,6 +219,7 @@ struct UntetheredBannerSlot<Content: View, Banner: View>: View {
                     : manager.isReachingWatch ? String(localized: "Starting Watch Mode…")
                     : manager.isHandingBack ? String(localized: "Asking the watch for the pump…")
                     : manager.state.session.isCheckingForeignSession ? String(localized: "Safety Check with the Watch")
+                    : silentMinutes != nil ? String(localized: "⚠️ No Word From the Watch")
                     : String(localized: "Watch mode on Apple Watch"),
                 manager.isBluetoothOff
                     ? (manager.state.pumpReturnPending
@@ -233,7 +235,12 @@ struct UntetheredBannerSlot<Content: View, Banner: View>: View {
                     : manager.state.session.isCheckingForeignSession
                     // not untethered mode, though it shows in its place (6 November, 07:36: "what was that?")
                     ? String(localized: "The watch was just at the pod. The phone waits for the watch's answer before dosing again, usually a few seconds. Watch mode is not on.")
-                    : String(localized: "The phone doesn't dose. Bolus and carbs are entered on the watch."),
+                    : silentMinutes.map {
+                        String(
+                            localized: "Nothing from the watch for \($0) min, though both are near the sensor. Open Trio on the watch and check that it loops, or tap here to take the pump back."
+                        )
+                    }
+                    ?? String(localized: "The phone doesn't dose. Bolus and carbs are entered on the watch."),
                 manager.isWatchInCharge && !manager.isReachingWatch,
                 { showActions = manager.isWatchInCharge && !manager.isReachingWatch }
             )

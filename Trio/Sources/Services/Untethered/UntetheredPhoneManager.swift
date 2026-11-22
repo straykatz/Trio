@@ -459,6 +459,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             watchInChargeSince = nil
             watchSilenceNotifiedFor = nil
             watchSilenceAskedFor = nil
+            watchSilentNoticeDue = nil
             return
         }
         let now = Date()
@@ -489,6 +490,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         // still in charge, and still the same silence, after the wait for Nightscout
         guard isWatchInCharge, watchSilenceNotifiedFor != reference else { return }
         watchSilenceNotifiedFor = reference
+        watchSilentNoticeDue = now.addingTimeInterval(max(dueIn, 0))
         warning(
             .watch,
             "Untethered: nothing from the watch for \(Int(silence / 60)) min while the phone reads the sensor" +
@@ -510,6 +512,18 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             withCompletionHandler: nil
         )
     }
+    /// When the No Word From the Watch notice is due or was given: the home screen's banner says it too, as a
+    /// notification shows only for a few seconds and makes no sound with the iPhone on silent (22 November, 15:41).
+    @Published private(set) var watchSilentNoticeDue: Date?
+
+    /// Minutes without word from the watch, once the notice is due and nothing came from the watch since it was set.
+    func watchSilentMinutes(now: Date) -> Int? {
+        guard isWatchInCharge, let due = watchSilentNoticeDue, let reference = watchSilenceNotifiedFor, now >= due,
+              (WatchAppPresence.lastHeard ?? .distantPast) <= reference
+        else { return nil }
+        return Int(now.timeIntervalSince(reference) / 60)
+    }
+
     /// For what the screens show: not while the phone only asks the watch about the pod after another controller
     /// used it (`isCheckingForeignSession`); dosing is held then all the same.
     var isWatchShownInCharge: Bool { isWatchInCharge && !state.session.isCheckingForeignSession }
