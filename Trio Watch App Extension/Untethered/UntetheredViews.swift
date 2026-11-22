@@ -973,7 +973,8 @@ struct UntetheredGlanceView: View {
             state: state,
             glucoseValues: state.glucoseValues,
             isScrubbing: .constant(false),
-            scrubSteps: .constant(0)
+            scrubSteps: .constant(0),
+            pointScale: 0.45
         )
             .allowsHitTesting(false)
     }

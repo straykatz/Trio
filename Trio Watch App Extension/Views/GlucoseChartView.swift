@@ -70,6 +70,8 @@ struct GlucoseChartView: View {
     /// otherwise, so nothing has to hand the crown back after scrubbing.
     @Binding var isScrubbing: Bool
     @Binding var scrubSteps: Double
+    /// The dots' area against the full app's: smaller on the minimal screen, where the chart is short (22 November).
+    var pointScale: CGFloat = 1
     /// The chart takes the crown by focus while scrubbing (the vertical pages take it otherwise, by themselves)
     /// and gives it back when scrubbing ends.
     @FocusState private var crownFocused: Bool
@@ -207,13 +209,15 @@ struct GlucoseChartView: View {
     }
 
     var glucosePointSize: CGFloat {
+        let size: CGFloat
         switch timeWindow {
-        case .oneHour: return 24
-        case .threeHours: return 18
-        case .sixHours: return 14
-        case .twelveHours: return 10
-        case .twentyFourHours: return 6
+        case .oneHour: size = 24
+        case .threeHours: size = 18
+        case .sixHours: size = 14
+        case .twelveHours: size = 10
+        case .twentyFourHours: size = 6
         }
+        return size * pointScale
     }
 
     private var yAxisBounds: (min: Double, max: Double)? {
