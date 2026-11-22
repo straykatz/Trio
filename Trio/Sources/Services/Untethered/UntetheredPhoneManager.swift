@@ -390,6 +390,27 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         return missing.isEmpty ? .ready : .missing(missing)
     }
 
+    /// The session counter the watch left on the pod when it met it: the iPhone takes a resync to it as the watch's,
+    /// not another controller's. Only while the iPhone has the pump, and only for its pod (OmnipodKit checks).
+    func acceptWatchPodCounter(_ counter: String) {
+        guard !isWatchInCharge, let pump = apsManager.pumpManager as? OmniPumpManager else { return }
+        pump.acceptPartnerSessionCounter(counter)
+    }
+
+    /// What the watch last said about the sensor, when it says the watch can't read it: no start then (as the watch
+    /// checks itself). Nothing from the watch yet, or nothing recent: no refusal, the watch's own check stands.
+    private var watchSensorNotPaired: String? {
+        guard let report = WatchReadiness.latest, Date().timeIntervalSince(report.at) < Self.readinessMaxAge,
+              report.readerOn,
+              let g7 = fetchGlucoseManager.cgmManager as? G7CGMManager, g7.state.sessionMode == .direct,
+              let sensor = g7.state.sensorID
+        else { return nil }
+        guard !report.sensorReady || report.sensorName.suffix(2) != sensor.suffix(2) else { return nil }
+        return String(
+            localized: "The watch isn't paired with this sensor yet. Open the sensor page in Trio on the watch near the sensor and wait for its first reading, then start."
+        )
+    }
+
     /// A report older than this says nothing about now.
     private static let readinessMaxAge: TimeInterval = 6 * 60 * 60
     /// Time for the watch to get the new pod's copy and answer, and for the user to open Trio on it.
@@ -775,6 +796,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         guard state.session.isIdle, !state.pumpReturnPending else {
             return String(localized: "The phone is still taking the pump back from the last session.")
         }
+        if let reason = watchSensorNotPaired { return reason }
         setError(nil)
         // about the last session; this one is judged on its own
         UntetheredGate.update {

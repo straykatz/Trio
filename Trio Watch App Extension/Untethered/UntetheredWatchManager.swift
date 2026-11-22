@@ -1,5 +1,6 @@
 import Foundation
 import LoopKit
+import OmnipodKit
 import UserNotifications
 import WatchConnectivity
 import WatchKit
@@ -1379,7 +1380,7 @@ import WatchKit
         // a start by hand shows in the log: on 3 November at 18:04:55 one went out 6 s after Trio opened from the
         // new-pod notice, and nothing showed whether it was tapped
         Task { await WatchLogger.shared.log("⌚️ Untethered: Start Untethered tapped on the watch", force: true) }
-        if let reason = versionMismatch ?? Self.batteryTooLow {
+        if let reason = versionMismatch ?? Self.batteryTooLow ?? Self.sensorNotPaired {
             setError(reason)
             return
         }
@@ -1420,6 +1421,18 @@ import WatchKit
     }
 
     private static let startRequestTries = 4
+
+    /// No start while the watch has no pairing of its own with the iPhone's sensor, or the sensor never answered it:
+    /// it would hold the pod with nothing to loop on (Jeremy Barnum's Loop, 22 November, "No Start until the watch
+    /// has read the sensor itself": 70 minutes on 17 November). The same check as the iPhone's readiness line.
+    static var sensorNotPaired: String? {
+        let reader = WatchG7Reader.shared
+        guard reader.sensorName != nil else { return nil }
+        if reader.hasWatchKey, reader.sensorAnswered || !reader.isEnabled { return nil }
+        return String(
+            localized: "The watch isn't paired with this sensor yet. Open the sensor page in Trio on the watch near the sensor and wait for its first reading, then start."
+        )
+    }
 
     // MARK: - Handing back
 
@@ -2337,6 +2350,7 @@ extension UntetheredWatchManager {
     // MARK: - Ready for a forgotten iPhone
 
     static let readinessGrantKey = "grantIssuedAt"
+    static let metPodCounterKey = "untethered.metPodCounter"
 
     /// What a start without the iPhone needs, sent with the battery report for the iPhone's "ready for a forgotten
     /// iPhone" line (22 November: a start without the iPhone fails when the watch never met the pod or the sensor,
@@ -2352,6 +2366,8 @@ extension UntetheredWatchManager {
             report[Self.readinessGrantKey] = issuedAt.timeIntervalSince1970
             report["podKnown"] = !standingGrantPodUnknown
         }
+        // names its pod: the iPhone ignores it for any other
+        if let counter = UserDefaults.standard.string(forKey: Self.metPodCounterKey) { report["podCounter"] = counter }
         return report
     }
 
@@ -2440,8 +2456,16 @@ extension UntetheredWatchManager {
             }
             self.store.update { $0.localStates[pump.pluginIdentifier] = local }
             UserDefaults.standard.set(false, forKey: Self.grantPodUnknownKey)
+            // the meeting logged in to the pod: the iPhone takes the counter it left as the watch's, not another
+            // controller's (22 November: a start right after the meeting failed on it)
+            let counter = (pump as? OmniPumpManager)?.sessionCounterForPartner
+            UserDefaults.standard.set(counter, forKey: Self.metPodCounterKey)
             self.refresh()
-            await WatchLogger.shared.log("⌚️ Untethered: found the new pod in \(seconds) s; the fallback can reach it now", force: true)
+            WatchState.shared.reportReadinessIfChanged()
+            await WatchLogger.shared.log(
+                "⌚️ Untethered: found the new pod in \(seconds) s; the fallback can reach it now\(counter == nil ? "" : ", its session counter sent to the iPhone")",
+                force: true
+            )
         }
     }
 
