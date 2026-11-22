@@ -441,7 +441,9 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
     private static let watchSilenceAfter: TimeInterval = 20 * 60
     /// The phone reads the sensor every 5 minutes: a silence reaching 20 minutes before the next reading is said at its
     /// 20th minute, booked ahead and taken back when the watch is heard from (`WatchAppPresence.heardFromWatch`).
-    private static let watchSilenceLookahead: TimeInterval = 5 * 60
+    /// A little over 5 minutes: a silence due a few seconds past the next reading is booked at this one (22 November,
+    /// 10:15: due in 5 min 3 s, not booked, and the next check came too late).
+    private static let watchSilenceLookahead: TimeInterval = 5.5 * 60
     static let watchSilentID = "untethered.watchSilent"
     /// The phone's own reading this recent: it is within Bluetooth range of the sensor, so near the user and the watch.
     private static let phoneNearWithin: TimeInterval = 6 * 60
@@ -477,7 +479,9 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         let settings = settingsManager.settings
         if settings.nightscoutUploadWatch, settings.isUploadEnabled,
            let newest = await nightscoutManager.fetchNewestDeviceStatusDate(),
-           now.timeIntervalSince(newest) < Self.watchSilenceAfter
+           // a loop from after the watch went quiet; one from before only says it looped then (22 November, 15:36:
+           // a loop 19 min old, from before the silence, held the notice back until the next reading)
+           newest > reference
         {
             debug(.watch, "Untethered: nothing from the watch for \(minutes) min, but Nightscout has a loop \(Int(now.timeIntervalSince(newest) / 60)) min old: it loops")
             return
