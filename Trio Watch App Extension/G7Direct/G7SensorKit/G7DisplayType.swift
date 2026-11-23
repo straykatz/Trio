@@ -1,13 +1,3 @@
-//
-//  G7DisplayType.swift
-//  G7SensorKit
-//
-//  Copyright © 2026 LoopKit Authors. All rights reserved.
-//
-//  The type values are from DexKit by Erik Tolboom
-//  (https://github.com/nightscout/DexKit), from the official app.
-//
-
 import Foundation
 
 /// What kind of display a sensor is talking to. A sensor keeps one slot per

@@ -1,10 +1,3 @@
-//
-//  G7ChallengeSigner.swift
-//  G7SensorKit
-//
-//  Copyright © 2026 LoopKit Authors. All rights reserved.
-//
-
 import CryptoKit
 import Foundation
 
@@ -19,7 +12,6 @@ enum G7ChallengeSignerError: Error {
 /// return an ECDSA-P256 signature over exactly those bytes, made with the
 /// fixed key whose certificate we uploaded moments earlier.
 enum G7ChallengeSigner {
-
     private static let privateKey: P256.Signing.PrivateKey = {
         // The key material is a compile-time constant, so a failure here is a
         // build mistake rather than a runtime condition.

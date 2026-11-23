@@ -167,7 +167,10 @@ import WatchConnectivity
         .bool(forKey: WatchMessageKeys.allowUntetheredStartWithoutPhoneWatch)
     {
         didSet {
-            UserDefaults.standard.set(allowUntetheredStartWithoutPhone, forKey: WatchMessageKeys.allowUntetheredStartWithoutPhoneWatch)
+            UserDefaults.standard.set(
+                allowUntetheredStartWithoutPhone,
+                forKey: WatchMessageKeys.allowUntetheredStartWithoutPhoneWatch
+            )
         }
     }
 
@@ -204,7 +207,9 @@ import WatchConnectivity
             UserDefaults.standard.set(useCriticalAlerts, forKey: WatchMessageKeys.useCriticalAlertsWatch)
             if useCriticalAlerts {
                 UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .criticalAlert]) { granted, _ in
-                    Task { await WatchLogger.shared.log("⌚️ Critical alerts on: watch notifications allowed=\(granted)", force: true) }
+                    Task {
+                        await WatchLogger.shared.log("⌚️ Critical alerts on: watch notifications allowed=\(granted)", force: true)
+                    }
                 }
             }
         }
@@ -228,12 +233,15 @@ import WatchConnectivity
     var chartLowMgDL: Double? = UserDefaults.standard.object(forKey: "chartLowMgDL") as? Double {
         didSet { UserDefaults.standard.set(chartLowMgDL, forKey: "chartLowMgDL") }
     }
+
     var chartHighMgDL: Double? = UserDefaults.standard.object(forKey: "chartHighMgDL") as? Double {
         didSet { UserDefaults.standard.set(chartHighMgDL, forKey: "chartHighMgDL") }
     }
+
     var chartTargetMgDL: Double? = UserDefaults.standard.object(forKey: "chartTargetMgDL") as? Double {
         didSet { UserDefaults.standard.set(chartTargetMgDL, forKey: "chartTargetMgDL") }
     }
+
     /// Carbs and boluses of the last 24 hours from the phone, times only.
     var phoneTreatmentMarkers: [WatchTreatmentMarker] = []
     /// IOB and COB at each of the phone's loops in the last 24 hours, for the chart's scrub line.
@@ -1047,7 +1055,11 @@ import WatchConnectivity
             phoneTreatmentMarkers = boluses.compactMap { entry -> WatchTreatmentMarker? in
                 guard let time = entry["date"] as? TimeInterval else { return nil }
                 let smb = entry["smb"] as? Bool ?? false
-                return WatchTreatmentMarker(id: "bolus-\(time)", date: Date(timeIntervalSince1970: time), kind: smb ? .smb : .bolus)
+                return WatchTreatmentMarker(
+                    id: "bolus-\(time)",
+                    date: Date(timeIntervalSince1970: time),
+                    kind: smb ? .smb : .bolus
+                )
             } + carbs.map { time in
                 WatchTreatmentMarker(id: "carbs-\(time)", date: Date(timeIntervalSince1970: time), kind: .carbs)
             }

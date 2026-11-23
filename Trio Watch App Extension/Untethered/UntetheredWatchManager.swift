@@ -636,9 +636,13 @@ import WatchKit
         if store.isLocked {
             if store.openIfLocked() {
                 adoptSavedState()
-                Task { await WatchLogger.shared.log("⌚️ Untethered: saved state open again, taken on; this session step left", force: true) }
+                Task {
+                    await WatchLogger.shared
+                        .log("⌚️ Untethered: saved state open again, taken on; this session step left", force: true) }
             } else {
-                Task { await WatchLogger.shared.log("⌚️ Untethered: a session step left for later, the saved state is locked", force: true) }
+                Task {
+                    await WatchLogger.shared
+                        .log("⌚️ Untethered: a session step left for later, the saved state is locked", force: true) }
             }
             reply?([:])
             return
@@ -851,7 +855,10 @@ import WatchKit
             meetingPump = nil
             if !meeting.isControlReleased { meeting.releaseControl() }
             // 3 November, 18:04:55: a takeover beside a search for the new pod didn't find it in 2 minutes
-            Task { await WatchLogger.shared.log("⌚️ Untethered: the takeover let go of the new-pod search's manager and searches with its own", force: true) }
+            Task { await WatchLogger.shared.log(
+                "⌚️ Untethered: the takeover let go of the new-pod search's manager and searches with its own",
+                force: true
+            ) }
         }
         let pump: PumpManager & ExclusiveDeviceControl
         if let witness, data.session.startedWithoutPhone, data.handover == nil,
@@ -911,7 +918,10 @@ import WatchKit
         notify(
             id: Self.notificationPrefix + "mealTimeReminder",
             title: String(localized: "Time to Eat", comment: "Meal-time reminder on the watch"),
-            body: String(localized: "Your \(minutes) min meal-time reminder is up: time to eat.", comment: "Meal-time reminder on the watch"),
+            body: String(
+                localized: "Your \(minutes) min meal-time reminder is up: time to eat.",
+                comment: "Meal-time reminder on the watch"
+            ),
             after: max(1, delay),
             asksForAction: true
         )
@@ -1014,7 +1024,10 @@ import WatchKit
             }
             if reused != nil {
                 Task {
-                    await WatchLogger.shared.log("⌚️ Untethered: new sensor, already paired by the watch's reader: taking its key", force: true)
+                    await WatchLogger.shared.log(
+                        "⌚️ Untethered: new sensor, already paired by the watch's reader: taking its key",
+                        force: true
+                    )
                 }
             } else {
                 Task { await WatchLogger.shared.log("⌚️ Untethered: new sensor, pairing the watch afresh", force: true) }
@@ -1365,7 +1378,9 @@ import WatchKit
         else { return }
         UserDefaults.standard.set(phone, forKey: Self.updateWaitingNoticeKey)
         let watch = UntetheredVersion.current ?? "?"
-        Task { await WatchLogger.shared.log("⌚️ Untethered: the iPhone runs \(phone), this watch app \(watch): update waiting", force: true) }
+        Task {
+            await WatchLogger.shared
+                .log("⌚️ Untethered: the iPhone runs \(phone), this watch app \(watch): update waiting", force: true) }
         notify(
             id: Self.notificationPrefix + "updateWaiting",
             title: String(localized: "Update Waiting"),
@@ -1440,7 +1455,10 @@ import WatchKit
     func end() {
         if isBolusing {
             Task {
-                await WatchLogger.shared.log("⌚️ Untethered: End tapped during a bolus — handing back, the bolus goes on on the pod", force: true)
+                await WatchLogger.shared.log(
+                    "⌚️ Untethered: End tapped during a bolus — handing back, the bolus goes on on the pod",
+                    force: true
+                )
             }
         }
         guard WCSession.default.isReachable else {
@@ -1485,7 +1503,8 @@ import WatchKit
                 try? await Task.sleep(nanoseconds: 500_000_000)
             }
             if self.isLooping {
-                Task { await WatchLogger.shared.log("⌚️ Untethered: hand-back goes on past a loop waiting on the pump", force: true) }
+                Task {
+                    await WatchLogger.shared.log("⌚️ Untethered: hand-back goes on past a loop waiting on the pump", force: true) }
             }
             self.expireAdjustments(now: Date())
             // a low temp ends here and goes with the last records, for the phone to set again; a high one runs on
@@ -1503,7 +1522,9 @@ import WatchKit
                 (await self.pumpManager.asyncMap { await self.readPump($0) }) ?? nil
             }
             if status == nil {
-                Task { await WatchLogger.shared.log("⌚️ Untethered: hand-back without a last pod read; the phone reads it", force: true) }
+                Task {
+                    await WatchLogger.shared
+                        .log("⌚️ Untethered: hand-back without a last pod read; the phone reads it", force: true) }
             }
             status?.tempBasal = handed?.resume
             status?.runningHighTemp = handed?.leftRunning
@@ -1523,7 +1544,7 @@ import WatchKit
     /// no longer waited for.
     @MainActor static func withTimeout<T>(
         _ seconds: TimeInterval,
-        _ operation: @escaping @MainActor () async -> T?
+        _ operation: @escaping @MainActor() async -> T?
     ) async -> T? {
         // both sides run on the main queue, so the flag needs no lock; a box, as a captured var can't change in a Task
         let once = TimeoutOnce()
@@ -1951,7 +1972,9 @@ extension UntetheredWatchManager {
             notify(
                 id: Self.notificationPrefix + "battery",
                 title: String(localized: "Watch Battery Low"),
-                body: String(localized: "The watch's battery is at \(battery) %. Hand back to the iPhone soon. At 10 % the watch hands back by itself.")
+                body: String(
+                    localized: "The watch's battery is at \(battery) %. Hand back to the iPhone soon. At 10 % the watch hands back by itself."
+                )
             )
         } else if WCSession.default.isReachable {
             guard Self.batteryStep < 3 else { return }
@@ -1969,7 +1992,9 @@ extension UntetheredWatchManager {
             notify(
                 id: Self.notificationPrefix + "battery",
                 title: String(localized: "Watch Battery Low"),
-                body: String(localized: "The watch's battery is at \(battery) % and the iPhone is out of reach. Take the pump back on the iPhone (Take Back the Pump Now) or charge the watch. The watch hands back once the iPhone is in reach.")
+                body: String(
+                    localized: "The watch's battery is at \(battery) % and the iPhone is out of reach. Take the pump back on the iPhone (Take Back the Pump Now) or charge the watch. The watch hands back once the iPhone is in reach."
+                )
             )
         }
     }
@@ -2178,7 +2203,10 @@ extension UntetheredWatchManager {
                 return
             case let .notReached(reason):
                 Task {
-                    await WatchLogger.shared.log("⌚️ Untethered: fallback — the watch's look didn't reach the pod (\(reason))", force: true)
+                    await WatchLogger.shared.log(
+                        "⌚️ Untethered: fallback — the watch's look didn't reach the pod (\(reason))",
+                        force: true
+                    )
                 }
             case .firstLook:
                 // a fresh manager can't vouch for anything before its first look: the chain starts here
@@ -2209,9 +2237,11 @@ extension UntetheredWatchManager {
                 let span = now.timeIntervalSince(since)
                 let silenceNow = now.timeIntervalSince(phoneNewest)
                 let retry = self.fallbackDecidedFor == phoneNewest
-                let chain = "nobody at the pod since \(Self.timeText(since)) (\(self.fallbackNobodyLooks + 1) looks, \(Int(span / 60)) min)"
+                let chain =
+                    "nobody at the pod since \(Self.timeText(since)) (\(self.fallbackNobodyLooks + 1) looks, \(Int(span / 60)) min)"
                 // a retry too: a try that didn't reach the pod may have found the phone holding it (Fable, 12 November)
-                guard silenceNow > Self.fallbackPhoneSilence, ownNewer >= Self.fallbackOwnReadings, span >= Self.fallbackWitnessSpan
+                guard silenceNow > Self.fallbackPhoneSilence, ownNewer >= Self.fallbackOwnReadings,
+                      span >= Self.fallbackWitnessSpan
                 else {
                     Task {
                         await WatchLogger.shared.log(
@@ -2400,7 +2430,9 @@ extension UntetheredWatchManager {
         if WKApplication.shared().applicationState == .active {
             meetNewPodIfNeeded()
         } else if !wasUnknown, WatchState.shared.untetheredMode, WatchState.shared.allowUntetheredStartWithoutPhone {
-            Task { await WatchLogger.shared.log("⌚️ Untethered: the phone's copy is for a pod the watch doesn't know yet", force: true) }
+            Task {
+                await WatchLogger.shared
+                    .log("⌚️ Untethered: the phone's copy is for a pod the watch doesn't know yet", force: true) }
             askForSessionWithNewPod(force: true)
         }
     }
@@ -2428,7 +2460,9 @@ extension UntetheredWatchManager {
         pump.pumpManagerDelegate = self
         pump.delegateQueue = .main
         meetingPump = pump
-        Task { await WatchLogger.shared.log("⌚️ Untethered: Trio in front, looking for the pod the watch doesn't know yet", force: true) }
+        Task {
+            await WatchLogger.shared
+                .log("⌚️ Untethered: Trio in front, looking for the pod the watch doesn't know yet", force: true) }
         let releaseHold = Self.holdProcess(reason: "Untethered: looking for the new pod", upTo: Self.fallbackWitnessHold)
         Task { @MainActor in
             defer {
@@ -2451,7 +2485,10 @@ extension UntetheredWatchManager {
             pump.releaseControl()
             let seconds = Int(Date().timeIntervalSince(started))
             guard read != nil, let local = Self.plist(pump.localState) else {
-                await WatchLogger.shared.log("⌚️ Untethered: the pod wasn't found in \(seconds) s; tried again when Trio is opened", force: true)
+                await WatchLogger.shared.log(
+                    "⌚️ Untethered: the pod wasn't found in \(seconds) s; tried again when Trio is opened",
+                    force: true
+                )
                 return
             }
             self.store.update { $0.localStates[pump.pluginIdentifier] = local }
@@ -2486,7 +2523,9 @@ extension UntetheredWatchManager {
         fallbackDecidedFor = nil
         let phoneNewest = WatchG7Reader.shared.phoneLoopSign ?? .distantPast
         fallbackLooksPaused = (phoneNewest, Date().addingTimeInterval(Self.fallbackLookPause))
-        Task { await WatchLogger.shared.log("⌚️ Untethered: fallback — the phone was just at the pod, no look for 9 min", force: true) }
+        Task {
+            await WatchLogger.shared
+                .log("⌚️ Untethered: fallback — the phone was just at the pod, no look for 9 min", force: true) }
     }
 
     func dropFallbackWitness() {
@@ -2502,7 +2541,10 @@ extension UntetheredWatchManager {
     func abandonLook() {
         lookAbandoned = true
         if let pump = lookingPump, !pump.isControlReleased { pump.releaseControl() }
-        Task { await WatchLogger.shared.log("⌚️ Untethered: fallback — watchOS ended the look's background time, the watch let go of the pod", force: true) }
+        Task { await WatchLogger.shared.log(
+            "⌚️ Untethered: fallback — watchOS ended the look's background time, the watch let go of the pod",
+            force: true
+        ) }
     }
 
     /// At a fallback try's first read with the deciding look's manager: the pod resynchronized its message count, so
@@ -2533,7 +2575,10 @@ extension UntetheredWatchManager {
     /// keeping it from the phone for its lease; the next reading tries again after a look.
     func fallbackTakeoverHoldExpired() {
         guard isFallbackSession, data.session.phase == .starting else { return }
-        Task { await WatchLogger.shared.log("⌚️ Untethered: fallback — watchOS ended the takeover's background time, the watch lets go of the pod", force: true) }
+        Task { await WatchLogger.shared.log(
+            "⌚️ Untethered: fallback — watchOS ended the takeover's background time, the watch lets go of the pod",
+            force: true
+        ) }
         apply(.takeoverFailed(String(localized: "watchOS ended the watch's background time before the pod answered.")))
     }
 
@@ -2610,13 +2655,14 @@ extension UntetheredWatchManager {
         fallbackDecidedFor = nil
         UserDefaults.standard.set(Self.fallbackTries, forKey: Self.fallbackTriesKey)
         Task { await WatchLogger.shared.log("⌚️ Untethered: fallback — the watch has the pod", force: true) }
-        let minutes = (WatchG7Reader.shared.phoneGlucoseDate).map { Int(Date().timeIntervalSince($0) / 60) }
+        let minutes = WatchG7Reader.shared.phoneGlucoseDate.map { Int(Date().timeIntervalSince($0) / 60) }
         let body = minutes.map {
             String(
                 localized: "The iPhone has been silent for \($0) minutes and is out of reach. The watch runs the pump until it's back, then hands it back by itself."
             )
         } ?? String(localized: "The watch runs the pump until the iPhone is back, then hands it back by itself.")
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [Self.notificationPrefix + "fallback"])
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: [Self.notificationPrefix + "fallback"])
         // watchOS starts Extended Untethered Mode's workout only with Trio in front
         let opensForWorkout = WatchState.shared.untetheredWorkout && WKApplication.shared().applicationState != .active
         // who doses changed: felt twice and asked again at 2 and 5 minutes until Trio is opened (7 November: a single
@@ -2651,7 +2697,8 @@ extension UntetheredWatchManager {
                 }
                 refresh()
             }
-            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [Self.notificationPrefix + "fallback"])
+            UNUserNotificationCenter.current()
+                .removePendingNotificationRequests(withIdentifiers: [Self.notificationPrefix + "fallback"])
             let phoneNewest = WatchG7Reader.shared.phoneLoopSign ?? .distantPast
             fallbackLooksPaused = (phoneNewest, Date().addingTimeInterval(Self.fallbackLookPause))
             return
@@ -2700,7 +2747,8 @@ extension UntetheredWatchManager {
                   Date().timeIntervalSince(self.handbackRequestedAt ?? .distantPast) > Self.fallbackHandbackRepeat
             else { return }
             self.handbackRequestedAt = Date()
-            Task { await WatchLogger.shared.log("⌚️ Untethered: fallback — the phone is back, handing the pump back", force: true) }
+            Task { await WatchLogger.shared.log("⌚️ Untethered: fallback — the phone is back, handing the pump back", force: true)
+            }
             self.send(.statusReport(holding: self.data.session.startStatus), epoch: self.data.session.epoch, queueing: true)
             self.send(.handbackRequested(minutesWithoutLoop: 0), epoch: self.data.session.epoch, queueing: true)
             self.holdOffPodForTakeBack()

@@ -78,10 +78,10 @@ class TrioRemoteControl: Injectable {
             case .bolus,
                  .meal:
                 await forwardToWatch(commandPayload)
-            case .startOverride,
-                 .cancelOverride,
-                 .tempTarget,
-                 .cancelTempTarget:
+            case .cancelOverride,
+                 .cancelTempTarget,
+                 .startOverride,
+                 .tempTarget:
                 await forwardAdjustmentToWatch(commandPayload)
             default:
                 await logError(

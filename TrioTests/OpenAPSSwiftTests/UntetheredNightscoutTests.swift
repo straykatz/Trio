@@ -42,8 +42,7 @@ import Testing
 
     // MARK: - Credentials
 
-    @Test("credentials: round trip through the watch state; empty or incomplete means none")
-    func credentialsDictionary() {
+    @Test("credentials: round trip through the watch state; empty or incomplete means none") func credentialsDictionary() {
         #expect(UntetheredNightscoutCredentials(dictionary: credentials.dictionary) == credentials)
         #expect(UntetheredNightscoutCredentials(dictionary: [:]) == nil)
         #expect(UntetheredNightscoutCredentials(dictionary: ["url": "not a url", "secretHash": "abc"]) == nil)
@@ -53,10 +52,14 @@ import Testing
         #expect(old?.uploadsGlucose == true)
     }
 
-    @Test("request: as NightscoutAPI, scheme, host and port with the API path, the secret hash as api-secret")
-    func request() throws {
+    @Test("request: as NightscoutAPI, scheme, host and port with the API path, the secret hash as api-secret") func request() throws {
         let request = try #require(
-            UntetheredNightscout.request(path: UntetheredNightscout.entriesPath, body: Data("[]".utf8), credentials: credentials, timeout: 12)
+            UntetheredNightscout.request(
+                path: UntetheredNightscout.entriesPath,
+                body: Data("[]".utf8),
+                credentials: credentials,
+                timeout: 12
+            )
         )
         #expect(request.url?.absoluteString == "https://example.invalid:1337/api/v1/entries.json")
         #expect(request.httpMethod == "POST")
@@ -67,8 +70,7 @@ import Testing
 
     // MARK: - Entries
 
-    @Test("entries: only readings after the last upload, oldest first, the newest 100 at most")
-    func entries() {
+    @Test("entries: only readings after the last upload, oldest first, the newest 100 at most") func entries() {
         let readings = (0 ..< 150).map { reading(Double($0) * 5, 100 + $0 % 20) }.shuffled()
         let now = t0.addingTimeInterval(150 * 5 * 60)
 
@@ -82,8 +84,7 @@ import Testing
         #expect(next.first?.dateString == t0.addingTimeInterval(141 * 5 * 60))
     }
 
-    @Test("entries: none older than a day, none from the future")
-    func entriesWindow() {
+    @Test("entries: none older than a day, none from the future") func entriesWindow() {
         let now = t0.addingTimeInterval(30 * 60 * 60)
         let readings = [reading(0, 100), reading(10 * 60, 110), reading(30 * 60 - 5, 120), reading(30 * 60 + 10, 130)]
         let entries = UntetheredNightscout.entries(readings, after: nil, now: now)
@@ -92,8 +93,7 @@ import Testing
 
     // MARK: - Device status
 
-    @Test("status: an enacted loop as the phone uploads one synced from the watch")
-    func enactedStatus() throws {
+    @Test("status: an enacted loop as the phone uploads one synced from the watch") func enactedStatus() throws {
         let enactedAt = Date(timeIntervalSince1970: 1_793_088_810) // 2026-10-27T08:13:30Z
         let data = try UntetheredNightscout.deviceStatus(
             determination: try determination(),
@@ -128,8 +128,7 @@ import Testing
         #expect(status["uploader"] == nil)
     }
 
-    @Test("status: no enacted part when the pump didn't take it, or the loop doesn't dose")
-    func suggestedOnly() throws {
+    @Test("status: no enacted part when the pump didn't take it, or the loop doesn't dose") func suggestedOnly() throws {
         for (enactedAt, automates) in [(nil, true), (t0, false)] as [(Date?, Bool)] {
             let data = try UntetheredNightscout.deviceStatus(
                 determination: try determination(),
@@ -152,8 +151,7 @@ import Testing
         #expect(try object(data)["created_at"] as? String == "2026-10-27T08:13:20.000Z")
     }
 
-    @Test("status: in mmol/L the reason and the targets are converted, the readings and forecasts stay in mg/dL")
-    func mmolStatus() throws {
+    @Test("status: in mmol/L the reason and the targets are converted, the readings and forecasts stay in mg/dL") func mmolStatus() throws {
         let data = try UntetheredNightscout.deviceStatus(
             determination: try determination(),
             enactedAt: nil,
@@ -177,8 +175,7 @@ import Testing
 
     // MARK: - History
 
-    @Test("history: the note that the watch uploaded a loop survives the trip to the phone")
-    func uploadedRecord() throws {
+    @Test("history: the note that the watch uploaded a loop survives the trip to the phone") func uploadedRecord() throws {
         let deliverAt = Date(timeIntervalSince1970: 1_793_088_800)
         let record = UntetheredRecord(
             key: UntetheredRecord.nightscoutKey(deliverAt),
@@ -202,8 +199,9 @@ import Testing
         )
     }
 
-    @Test("temp targets: as the phone uploads them, cut short by a cancel or a newer one, none from before the session")
-    func tempTargets() {
+    @Test(
+        "temp targets: as the phone uploads them, cut short by a cancel or a newer one, none from before the session"
+    ) func tempTargets() {
         let targets = [
             tempTarget(-60, target: 150, duration: 30), // before the session, ran out: the phone uploaded it
             tempTarget(10, target: 108, duration: 420),
@@ -218,15 +216,15 @@ import Testing
         #expect(treatments.first?.enteredBy == "Trio")
     }
 
-    @Test("temp targets: one from before the session that the watch cancelled goes up with the minutes it ran")
-    func tempTargetFromBefore() {
+    @Test(
+        "temp targets: one from before the session that the watch cancelled goes up with the minutes it ran"
+    ) func tempTargetFromBefore() {
         let targets = [tempTarget(-20, target: 150, duration: 60), TempTarget.cancel(at: t0.addingTimeInterval(5 * 60))]
         let treatments = UntetheredNightscout.tempTargetTreatments(targets, since: t0, latest: t0.addingTimeInterval(3600))
         #expect(treatments.map(\.duration) == [25])
     }
 
-    @Test("overrides: as Exercise with the name in notes, ended ones with the minutes they ran")
-    func overrides() {
+    @Test("overrides: as Exercise with the name in notes, ended ones with the minutes they ran") func overrides() {
         let runs = [
             UntetheredNightscout.OverrideRun(name: "Low treatment", start: t0.addingTimeInterval(60), minutes: 1),
             UntetheredNightscout.OverrideRun(name: "Weaker", start: t0.addingTimeInterval(120), minutes: 43200)

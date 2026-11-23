@@ -50,7 +50,8 @@ actor WatchNightscoutUploader {
             UserDefaults.standard.removeObject(forKey: Self.lastEntryKey)
             UserDefaults.standard.removeObject(forKey: Self.uploadedTreatmentsKey)
         }
-        let line = new == nil ? "⌚️ Nightscout: the watch doesn't upload" : "⌚️ Nightscout: the watch uploads while the iPhone is away"
+        let line = new == nil ? "⌚️ Nightscout: the watch doesn't upload" :
+            "⌚️ Nightscout: the watch uploads while the iPhone is away"
         Task { await WatchLogger.shared.log(line, force: true) }
     }
 
@@ -139,10 +140,15 @@ actor WatchNightscoutUploader {
         }
         if let urlError = error as? URLError {
             switch urlError.code {
-            case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed, .internationalRoamingOff:
+            case .dataNotAllowed,
+                 .internationalRoamingOff,
+                 .networkConnectionLost,
+                 .notConnectedToInternet:
                 return "no network"
             case .timedOut: return "timed out"
-            case .cannotFindHost, .dnsLookupFailed, .cannotConnectToHost: return "Nightscout not reachable"
+            case .cannotConnectToHost,
+                 .cannotFindHost,
+                 .dnsLookupFailed: return "Nightscout not reachable"
             default: return "network error \(urlError.code.rawValue)"
             }
         }

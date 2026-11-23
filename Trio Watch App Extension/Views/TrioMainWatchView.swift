@@ -158,7 +158,8 @@ struct TrioMainWatchView: View {
                         MealReminderButton(state: state)
                             .position(
                                 x: WKInterfaceDevice.current().screenBounds.width - 20,
-                                y: (WKInterfaceDevice.current().screenBounds.height / 4) - 7 // level with the syncing sign on the left
+                                y: (WKInterfaceDevice.current().screenBounds.height / 4) -
+                                    7 // level with the syncing sign on the left
                             )
                     }
 
@@ -490,7 +491,10 @@ struct MealReminderButton: View {
             isPresented: $showsReminder,
             titleVisibility: .visible
         ) {
-            Button(String(localized: "Cancel Reminder", comment: "Watch: cancel the pending meal-time reminder"), role: .destructive) {
+            Button(
+                String(localized: "Cancel Reminder", comment: "Watch: cancel the pending meal-time reminder"),
+                role: .destructive
+            ) {
                 state.cancelMealTimeReminder()
             }
             Button(String(localized: "Keep", comment: "Watch: keep the pending meal-time reminder"), role: .cancel) {}

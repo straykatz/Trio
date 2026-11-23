@@ -119,14 +119,20 @@ struct BolusInputView: View {
                     if showsOptions {
                         HStack(spacing: 5) {
                             if state.offersReducedBolus {
-                                optionButton(String(localized: "Reduced", comment: "Reduced bolus option on the watch"), isOn: reducedBolus) {
+                                optionButton(
+                                    String(localized: "Reduced", comment: "Reduced bolus option on the watch"),
+                                    isOn: reducedBolus
+                                ) {
                                     reducedBolus.toggle()
                                     if reducedBolus { superBolus = false }
                                     state.requestBolusRecommendation(reducedBolus: reducedBolus, superBolus: superBolus)
                                 }
                             }
                             if state.offersSuperBolus {
-                                optionButton(String(localized: "Super", comment: "Super bolus option on the watch"), isOn: superBolus) {
+                                optionButton(
+                                    String(localized: "Super", comment: "Super bolus option on the watch"),
+                                    isOn: superBolus
+                                ) {
                                     superBolus.toggle()
                                     if superBolus { reducedBolus = false }
                                     state.requestBolusRecommendation(reducedBolus: reducedBolus, superBolus: superBolus)
@@ -137,7 +143,10 @@ struct BolusInputView: View {
                                 optionButton(reminderLabel, isOn: state.mealTimeReminderMinutes > 0) {
                                     showsReminderPicker = true
                                 }
-                                .accessibilityLabel(String(localized: "Remind Me to Eat", comment: "Meal-time reminder on the watch"))
+                                .accessibilityLabel(String(
+                                    localized: "Remind Me to Eat",
+                                    comment: "Meal-time reminder on the watch"
+                                ))
                                 .confirmationDialog(
                                     String(localized: "Remind Me to Eat", comment: "Meal-time reminder on the watch"),
                                     isPresented: $showsReminderPicker,
@@ -146,7 +155,10 @@ struct BolusInputView: View {
                                     ForEach(state.mealTimeReminderPresets.filter { $0 > 0 }.sorted(), id: \.self) { minutes in
                                         Button(
                                             (minutes == state.mealTimeReminderMinutes ? "✓ " : "")
-                                                + String(localized: "In \(minutes) min", comment: "Meal-time reminder preset on the watch")
+                                                + String(
+                                                    localized: "In \(minutes) min",
+                                                    comment: "Meal-time reminder preset on the watch"
+                                                )
                                         ) {
                                             state.mealTimeReminderMinutes = minutes
                                         }
@@ -173,7 +185,10 @@ struct BolusInputView: View {
 
                     Button(actionButtonLabel) {
                         if isCarbsOnly {
-                            state.sendCarbsEntry(state.carbsAmount, remindAfter: offersReminder ? state.mealTimeReminderMinutes : 0)
+                            state.sendCarbsEntry(
+                                state.carbsAmount,
+                                remindAfter: offersReminder ? state.mealTimeReminderMinutes : 0
+                            )
                             navigationPath.append(NavigationDestinations.acknowledgmentPending)
                         } else {
                             state.bolusAmount = min(bolusAmount, effectiveBolusLimit)

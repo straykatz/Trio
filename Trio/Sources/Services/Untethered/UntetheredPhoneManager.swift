@@ -288,7 +288,12 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             self.apsManager.bluetoothManager?.addBluetoothObserver(self, queue: .main)
             await self.forwardCancellations()
             if UntetheredGate.isLocked {
-                self.setError(String(localized: "Trio can't read its watch mode state until the iPhone is unlocked. The iPhone doesn't dose until then."))
+                self
+                    .setError(
+                        String(
+                            localized: "Trio can't read its watch mode state until the iPhone is unlocked. The iPhone doesn't dose until then."
+                        )
+                    )
             }
             if self.state.pumpReturnPending { await self.finishPumpReturn() }
             await self.uploadSpans()
@@ -384,7 +389,9 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             missing.append(String(localized: "the watch's G7 reader is off: turn it on on the sensor page of Trio on the watch"))
         } else if !report.sensorReady || report.sensorName.suffix(2) != (g7?.state.sensorID ?? "").suffix(2) {
             missing.append(
-                String(localized: "the watch isn't paired with this sensor yet: open Trio on the watch near the sensor until the first reading")
+                String(
+                    localized: "the watch isn't paired with this sensor yet: open Trio on the watch near the sensor until the first reading"
+                )
             )
         }
         return missing.isEmpty ? .ready : .missing(missing)
@@ -492,7 +499,10 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         // after 6 minutes, asked once: queued, and as a complication transfer it wakes the watch app at once
         if silence >= Self.watchSilenceAskAfter, watchSilenceAskedFor != reference, state.session.phase == .active {
             watchSilenceAskedFor = reference
-            debug(.watch, "Untethered: nothing from the watch for \(Int(silence / 60)) min while the phone reads the sensor: asking whether it holds the pump")
+            debug(
+                .watch,
+                "Untethered: nothing from the watch for \(Int(silence / 60)) min while the phone reads the sensor: asking whether it holds the pump"
+            )
             send(.statusQuery, epoch: state.session.epoch)
         }
         let dueIn = Self.watchSilenceAfter - silence
@@ -505,7 +515,10 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
            // a loop 19 min old, from before the silence, held the notice back until the next reading)
            newest > reference
         {
-            debug(.watch, "Untethered: nothing from the watch for \(minutes) min, but Nightscout has a loop \(Int(now.timeIntervalSince(newest) / 60)) min old: it loops")
+            debug(
+                .watch,
+                "Untethered: nothing from the watch for \(minutes) min, but Nightscout has a loop \(Int(now.timeIntervalSince(newest) / 60)) min old: it loops"
+            )
             return
         }
         // still in charge, and still the same silence, after the wait for Nightscout
@@ -533,6 +546,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             withCompletionHandler: nil
         )
     }
+
     /// When the No Word From the Watch notice is due or was given: the home screen's banner says it too, as a
     /// notification shows only for a few seconds and makes no sound with the iPhone on silent (22 November, 15:41).
     @Published private(set) var watchSilentNoticeDue: Date?
@@ -575,7 +589,8 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
                 return
             }
             let session = WCSession.default
-            guard WCSession.isSupported(), session.activationState == .activated, WatchAppPresence.isInstalled(session) else { return }
+            guard WCSession.isSupported(), session.activationState == .activated,
+                  WatchAppPresence.isInstalled(session) else { return }
             try? session.updateApplicationContext([WatchMessageKeys.untetheredWake: Date().timeIntervalSince1970])
         }
     }
@@ -599,7 +614,8 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
               let reading = PhoneOwnGlucose.newestReading
         else { return }
         let session = WCSession.default
-        guard WCSession.isSupported(), session.activationState == .activated, WatchAppPresence.isInstalled(session) else { return }
+        guard WCSession.isSupported(), session.activationState == .activated,
+              WatchAppPresence.isInstalled(session) else { return }
         phoneReadingSentFor = own
         // only the newest is of use
         for transfer in session.outstandingUserInfoTransfers
@@ -629,7 +645,8 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         else { return false }
         guard own > (phoneBackToldFor ?? .distantPast) else { return true }
         let session = WCSession.default
-        guard WCSession.isSupported(), session.activationState == .activated, WatchAppPresence.isInstalled(session) else { return true }
+        guard WCSession.isSupported(), session.activationState == .activated,
+              WatchAppPresence.isInstalled(session) else { return true }
         phoneBackToldFor = own
         let context: [String: Any] = [
             WatchMessageKeys.untetheredWake: Date().timeIntervalSince1970,
@@ -643,7 +660,10 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
                 "Untethered: the phone reads the sensor again, told the watch now (complication transfer, \(session.remainingComplicationUserInfoTransfers) left today)"
             )
         } else {
-            debug(.watch, "Untethered: the phone reads the sensor again, telling the watch at its next wake (no complication on the watch face)")
+            debug(
+                .watch,
+                "Untethered: the phone reads the sensor again, telling the watch at its next wake (no complication on the watch face)"
+            )
         }
         return true
     }
@@ -791,7 +811,9 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
     /// - Returns: why the start was refused, nil when it went on to the watch
     @discardableResult @MainActor func start(linkedOverrideID: String? = nil) async -> String? {
         guard !UntetheredGate.isLocked else {
-            return String(localized: "Trio can't read its watch mode state until the iPhone is unlocked. The iPhone doesn't dose until then.")
+            return String(
+                localized: "Trio can't read its watch mode state until the iPhone is unlocked. The iPhone doesn't dose until then."
+            )
         }
         guard state.session.isIdle, !state.pumpReturnPending else {
             return String(localized: "The phone is still taking the pump back from the last session.")
@@ -848,7 +870,11 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
     @MainActor func forceTakeBack() async {
         // the state locked: whether the watch has the pump is unknown here, and the take-back would save over it
         guard !UntetheredGate.isLocked else {
-            setError(String(localized: "Trio can't read its watch mode state until the iPhone is unlocked. The iPhone doesn't dose until then."))
+            setError(
+                String(
+                    localized: "Trio can't read its watch mode state until the iPhone is unlocked. The iPhone doesn't dose until then."
+                )
+            )
             return
         }
         guard let control = apsManager.pumpManager as? ExclusiveDeviceControl else {
@@ -859,7 +885,9 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         // over another way (30 October, 16:34 to 16:57: eight take-backs refused with Bluetooth off).
         if isBluetoothOff {
             debug(.watch, "Untethered: take-back refused, the iPhone's Bluetooth is off")
-            setError(String(localized: "The iPhone's Bluetooth is off. Turn it on to take the pump back; the watch keeps running."))
+            setError(
+                String(localized: "The iPhone's Bluetooth is off. Turn it on to take the pump back; the watch keeps running.")
+            )
             return
         }
         isReachingPod = true
@@ -926,13 +954,15 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         if UntetheredGate.isLocked {
             // over the limit, record batches give way first: the watch sends them again, its release it doesn't
             let isRecords: Bool = {
-                guard let envelope = try? UntetheredEnvelope.decode(payload), case .records = envelope.message else { return false }
+                guard let envelope = try? UntetheredEnvelope.decode(payload),
+                      case .records = envelope.message else { return false }
                 return true
             }()
             let kept = lockedMessagesLock.withLock { () -> Bool in
                 if lockedMessages.count >= Self.lockedMessagesLimit {
                     guard !isRecords, let index = lockedMessages.firstIndex(where: { held in
-                        guard let envelope = try? UntetheredEnvelope.decode(held), case .records = envelope.message else { return false }
+                        guard let envelope = try? UntetheredEnvelope.decode(held),
+                              case .records = envelope.message else { return false }
                         return true
                     }) else { return false }
                     lockedMessages.remove(at: index)
@@ -940,7 +970,10 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
                 lockedMessages.append(payload)
                 return true
             }
-            debug(.watch, "Untethered: message from the watch \(kept ? "kept for later" : "left (too many kept)"), the saved state is locked")
+            debug(
+                .watch,
+                "Untethered: message from the watch \(kept ? "kept for later" : "left (too many kept)"), the saved state is locked"
+            )
             replyHandler?([:])
             return
         }
@@ -958,10 +991,10 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         // a session the watch started without the phone: taken on before its records are stored, which would
         // otherwise be confirmed and dropped as a finished session's. Queued messages arrive in order, so its
         // end comes after.
-        if self.state.session.isIdle || self.state.session.phase == .starting,
-           envelope.epoch > self.state.session.epoch
+        if state.session.isIdle || state.session.phase == .starting,
+           envelope.epoch > state.session.epoch
         {
-            let unknownWatchSince = self.state.session.unknownWatchSince
+            let unknownWatchSince = state.session.unknownWatchSince
             defer {
                 if let unknownWatchSince, self.state.session.epoch == envelope.epoch {
                     Task { await self.adoptProvisionalAudit(of: unknownWatchSince, epoch: envelope.epoch) }
@@ -970,22 +1003,23 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             switch envelope.message {
             case let .statusReport(holding: .some(status)),
                  let .takeoverComplete(status):
-                await self.apply(.watchHoldsPump(epoch: envelope.epoch, status: status))
-            case .statusReport(holding: nil) where self.state.session.phase == .starting:
-                await self.apply(.watchHoldsPump(epoch: envelope.epoch, status: nil))
+                await apply(.watchHoldsPump(epoch: envelope.epoch, status: status))
+            case .statusReport(holding: nil) where state.session.phase == .starting:
+                await apply(.watchHoldsPump(epoch: envelope.epoch, status: nil))
             // records alone don't hand the pump over: the watch is asked (Ponytail's review, 15 November). Only
             // while idle: during the ownership check (`.starting`) the answer to it decides.
-            case .records where self.state.session.isIdle:
-                await self.apply(.watchRecordsSeen(epoch: envelope.epoch))
+            case .records where state.session.isIdle:
+                await apply(.watchRecordsSeen(epoch: envelope.epoch))
             // a session the phone never knew is over: its later messages then belong to an ended session
-            case .released, .takeoverFailed:
-                await self.apply(.watchSessionEnded(epoch: envelope.epoch))
+            case .released,
+                 .takeoverFailed:
+                await apply(.watchSessionEnded(epoch: envelope.epoch))
             default: break
             }
         }
         switch envelope.message {
         case let .records(records):
-            let stored = await self.ingestInOrder(records, epoch: envelope.epoch)
+            let stored = await ingestInOrder(records, epoch: envelope.epoch)
             // acknowledged as soon as stored, so the watch's backlog stays small while it loops
             if let replyHandler,
                let payload = try? UntetheredEnvelope(epoch: envelope.epoch, message: .recordsStored(stored)).payload()
@@ -993,39 +1027,42 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
                 replyHandler(payload)
             } else {
                 replyHandler?([:])
-                self.send(.recordsStored(stored), epoch: envelope.epoch)
+                send(.recordsStored(stored), epoch: envelope.epoch)
             }
         case .syncDone:
             replyHandler?([:])
-            await self.finishSync(epoch: envelope.epoch)
+            await finishSync(epoch: envelope.epoch)
         case .standingGrantRequest:
             replyHandler?([:])
             // a copy for another build would start a session the two can't share
             guard UntetheredVersion.mismatch(watch: envelope.appVersion) == nil else { return }
             // whatever the fingerprint says: the watch has none
-            self.scheduleStandingGrant(settingsChanged: true, immediately: true)
+            scheduleStandingGrant(settingsChanged: true, immediately: true)
         case .startRequest:
             replyHandler?([:])
             // the watch asks again when its request seemed lost: one already on its way here is not refused
-            if self.isCheckingDevices || self.state.session.phase == .preparing || self.state.session.phase == .starting {
+            if isCheckingDevices || state.session.phase == .preparing || state.session.phase == .starting {
                 debug(.watch, "Untethered: the watch asked again for the start already under way")
                 return
             }
             // a watch app watchOS hasn't updated yet (or an older phone): no hand-over between two builds
             if let reason = UntetheredVersion.mismatch(watch: envelope.appVersion) {
                 warning(.watch, "Untethered: start refused, \(reason)")
-                self.send(.startRefused(reason: reason), epoch: envelope.epoch)
+                send(.startRefused(reason: reason), epoch: envelope.epoch)
                 return
             }
-            if let reason = await self.start() {
-                self.send(.startRefused(reason: reason), epoch: envelope.epoch)
+            if let reason = await start() {
+                send(.startRefused(reason: reason), epoch: envelope.epoch)
             }
         case let .handbackRequested(minutes):
             replyHandler?([:])
-            guard self.state.session.phase == .active, envelope.epoch == self.state.session.epoch else { return }
+            guard state.session.phase == .active, envelope.epoch == state.session.epoch else { return }
             // the fallback's hand-back, once the phone is back, comes the same way with no minutes: it's no stall
             if minutes > 0 {
-                warning(.watch, "Untethered: the watch hasn't reached the pod for \(minutes) min and asks the phone to take it back")
+                warning(
+                    .watch,
+                    "Untethered: the watch hasn't reached the pod for \(minutes) min and asks the phone to take it back"
+                )
             } else {
                 info(.watch, "Untethered: the watch hands the pump back, the phone is in reach again")
             }
@@ -1033,41 +1070,48 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             // The pod may still be busy with the watch's last command: a few more tries, a little apart, rather
             // than waiting for the watch's next request (24 October: refused at 13:55:56, taken back by hand 14:07).
             for attempt in 1 ... Self.handbackRequestTries {
-                await self.forceTakeBack()
+                await forceTakeBack()
                 // trying again in 20 s won't turn Bluetooth on: the watch asks again later
-                guard !self.isBluetoothOff else { break }
-                guard self.state.session.phase == .active, envelope.epoch == self.state.session.epoch,
+                guard !isBluetoothOff else { break }
+                guard state.session.phase == .active, envelope.epoch == state.session.epoch,
                       attempt < Self.handbackRequestTries
                 else { break }
-                debug(.watch, "Untethered: the pod was busy, trying again in \(Int(Self.handbackRequestRetryDelay)) s (\(attempt) of \(Self.handbackRequestTries))")
-                self.setError(String(localized: "The pod is still busy with the watch. The phone tries again in a moment; keep it near the pod."))
+                debug(
+                    .watch,
+                    "Untethered: the pod was busy, trying again in \(Int(Self.handbackRequestRetryDelay)) s (\(attempt) of \(Self.handbackRequestTries))"
+                )
+                setError(
+                    String(
+                        localized: "The pod is still busy with the watch. The phone tries again in a moment; keep it near the pod."
+                    )
+                )
                 try? await Task.sleep(nanoseconds: UInt64(Self.handbackRequestRetryDelay * 1_000_000_000))
-                guard self.state.session.phase == .active, envelope.epoch == self.state.session.epoch else { break }
+                guard state.session.phase == .active, envelope.epoch == state.session.epoch else { break }
             }
             // the watch's own notice may have gone unseen: the phone says it has the pump (15 November, 19:56 and 20:26)
-            if minutes > 0, self.state.session.isIdle { self.notifyPumpBackFromStalledWatch(minutes: minutes) }
+            if minutes > 0, state.session.isIdle { notifyPumpBackFromStalledWatch(minutes: minutes) }
         case let .remoteTreatmentResult(id, delivered, message):
             replyHandler?([:])
-            self.answerRemoteTreatment(id, delivered ? .delivered(message) : .refused(message))
+            answerRemoteTreatment(id, delivered ? .delivered(message) : .refused(message))
         case let .dosingModeChanged(mode):
             replyHandler?([:])
-            guard envelope.epoch >= self.state.session.epoch else { return }
-            var settings = self.settingsManager.settings
+            guard envelope.epoch >= state.session.epoch else { return }
+            var settings = settingsManager.settings
             guard settings.dosingMode != mode else { return }
             settings.dosingMode = mode
-            self.settingsManager.settings = settings
+            settingsManager.settings = settings
         // the answer to the question about a silent watch (`checkWatchSilence`): it holds nothing, for this session
         // or one it no longer knows (a relaunch that lost its state), so the phone takes the pod back at once, as Take
         // Back the Pump Now does, instead of waiting out the 20 minutes (after Jeremy Barnum's Sport Mode,
         // LoopKit/Loop#2545, 7 November)
         case .statusReport(holding: nil)
-            where self.state.session.phase == .active && envelope.epoch <= self.state.session.epoch
-            && self.watchSilenceAskedFor != nil:
+            where state.session.phase == .active && envelope.epoch <= state.session.epoch
+            && watchSilenceAskedFor != nil:
             replyHandler?([:])
-            self.watchSilenceAskedFor = nil
+            watchSilenceAskedFor = nil
             warning(.watch, "Untethered: the silent watch says it holds no pump; the phone takes it back")
-            await self.forceTakeBack()
-            if self.state.session.isIdle {
+            await forceTakeBack()
+            if state.session.isIdle {
                 let content = UNMutableNotificationContent()
                 content.title = String(localized: "Pump Back on iPhone")
                 content.body = String(
@@ -1080,7 +1124,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
                 )
             }
         default:
-            await self.apply(.received(envelope.message, epoch: envelope.epoch), reply: replyHandler)
+            await apply(.received(envelope.message, epoch: envelope.epoch), reply: replyHandler)
         }
     }
 
@@ -1462,7 +1506,11 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         late: @escaping (RemoteTreatmentAnswer) -> Void
     ) async -> RemoteTreatmentAnswer {
         guard state.session.phase == .active else {
-            return .refused(String(localized: "Command rejected: the pump is changing hands between the iPhone and the Apple Watch. Try again in a few minutes."))
+            return .refused(
+                String(
+                    localized: "Command rejected: the pump is changing hands between the iPhone and the Apple Watch. Try again in a few minutes."
+                )
+            )
         }
         // the same command a second time (e.g. its push delivered twice): the first one's wait reports it
         guard remoteTreatmentWaits[id] == nil, remoteTreatmentLate[id] == nil else { return .delivered("") }
@@ -1494,7 +1542,6 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             debug(.remote, "Untethered: the watch's answer to a remote command came after its wait ended")
         }
     }
-
 
     // MARK: - Starting
 
@@ -1776,7 +1823,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         var attempts = 0
         var bannerShown = false
         while state.pumpReturnPending, !state.podEndedOnWatch, !podChanged(since: returningPod),
-              !(await odometer.refreshDeliveredUnits())
+              await odometer.refreshDeliveredUnits() == false
         {
             attempts += 1
             debug(.watch, "Untethered: the pump did not answer yet (attempt \(attempts)), retrying")
@@ -1952,7 +1999,8 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
         // faulted or reset (2026-10-23 22:23, a pod past its 80 hours read 10.1 U below its start and the audit
         // warned of 10.8 U too many in the records).
         guard point.delivered >= 0 else {
-            UntetheredGate.update { $0.audit = nil; $0.auditFinding = nil }
+            UntetheredGate.update { $0.audit = nil
+                $0.auditFinding = nil }
             warning(
                 .watch,
                 "Untethered: no audit, the pod's delivery counter went back by \(-point.delivered) U (a faulted or new pod)"
@@ -2163,7 +2211,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
     /// back the applied set over each other's entries.
     @MainActor private func ingestInOrder(_ records: [UntetheredRecord], epoch: Int) async -> [UUID] {
         let previous = ingestTail
-        let batch = Task { @MainActor () -> [UUID] in
+        let batch = Task { @MainActor() -> [UUID] in
             await previous?.value
             return await self.ingest(records, epoch: epoch)
         }
@@ -2398,7 +2446,7 @@ final class UntetheredPhoneManager: ObservableObject, Injectable {
             context.name = "untetheredDetermination"
             let uploaded = determination.deliverAt.map { uploadedByWatch.contains(Int($0.timeIntervalSince1970)) } ?? false
             try await openAPS.processDetermination(determination, enactedAt: enactedAt, uploadedToNS: uploaded, on: context)
-            // `ingest` sorts the uploads once the batch is in
+        // `ingest` sorts the uploads once the batch is in
         case let .tdd(tdd):
             await tddStorage.storeTDD(
                 TDDResult(

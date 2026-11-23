@@ -1,10 +1,3 @@
-//
-//  G7BigUInt.swift
-//  G7SensorKit
-//
-//  Copyright © 2026 LoopKit Authors. All rights reserved.
-//
-
 import Foundation
 
 /// Minimal arbitrary-precision unsigned integer, sized for the 256- and
@@ -20,7 +13,6 @@ import Foundation
 /// links SwiftPM products needs the host app to embed them or it fails to
 /// load at runtime.
 struct G7BigUInt: Equatable, Comparable, CustomStringConvertible {
-
     private(set) var limbs: [UInt32]
 
     static let zero = G7BigUInt()

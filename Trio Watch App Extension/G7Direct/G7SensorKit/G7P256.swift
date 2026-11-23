@@ -1,10 +1,3 @@
-//
-//  G7P256.swift
-//  G7SensorKit
-//
-//  Copyright © 2026 LoopKit Authors. All rights reserved.
-//
-
 import Foundation
 
 /// A point on the NIST P-256 curve in affine coordinates.
@@ -43,24 +36,33 @@ struct G7P256Point: Equatable {
 /// here is standard published curve math, and `G7P256Tests` pins it against
 /// CryptoKit, which can independently produce `k * G` for any scalar `k`.
 enum G7P256 {
-
     /// Field prime: 2^256 - 2^224 + 2^192 + 2^96 - 1
-    static let p = G7BigUInt(bigEndianBytes: Data(hexadecimalString:
-        "FFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF")!)
+    static let p = G7BigUInt(bigEndianBytes: Data(
+        hexadecimalString:
+        "FFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF"
+    )!)
 
     /// Group order.
-    static let order = G7BigUInt(bigEndianBytes: Data(hexadecimalString:
-        "FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551")!)
+    static let order = G7BigUInt(bigEndianBytes: Data(
+        hexadecimalString:
+        "FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551"
+    )!)
 
     /// Curve coefficient b. (a is -3 mod p, folded into the doubling formula.)
-    static let b = G7BigUInt(bigEndianBytes: Data(hexadecimalString:
-        "5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B")!)
+    static let b = G7BigUInt(bigEndianBytes: Data(
+        hexadecimalString:
+        "5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B"
+    )!)
 
     static let generator = G7P256Point(
-        x: G7BigUInt(bigEndianBytes: Data(hexadecimalString:
-            "6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296")!),
-        y: G7BigUInt(bigEndianBytes: Data(hexadecimalString:
-            "4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5")!)
+        x: G7BigUInt(bigEndianBytes: Data(
+            hexadecimalString:
+            "6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296"
+        )!),
+        y: G7BigUInt(bigEndianBytes: Data(
+            hexadecimalString:
+            "4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5"
+        )!)
     )
 
     // MARK: - Field arithmetic

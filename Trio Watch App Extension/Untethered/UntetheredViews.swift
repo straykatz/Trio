@@ -175,11 +175,19 @@ struct UntetheredStatusView: View {
             return ("xmark.circle", .orange, "Pod Deactivated", "The phone pairs the next pod; hand back once it is nearby")
         case .active where manager.handbackRequestedAt.map({ now.timeIntervalSince($0) < 10 * 60 }) ?? false:
             if phoneSeemsBusy(now: now) {
-                return ("hourglass", .orange, "Asked iPhone to Take Over",
-                        "The iPhone hasn't taken the pump yet. Open Trio on it; the watch keeps looping meanwhile")
+                return (
+                    "hourglass",
+                    .orange,
+                    "Asked iPhone to Take Over",
+                    "The iPhone hasn't taken the pump yet. Open Trio on it; the watch keeps looping meanwhile"
+                )
             }
-            return ("arrow.uturn.backward.circle", .blue, "Asked iPhone to Take Over",
-                    "The iPhone takes the pump back as soon as it reaches the pod")
+            return (
+                "arrow.uturn.backward.circle",
+                .blue,
+                "Asked iPhone to Take Over",
+                "The iPhone takes the pump back as soon as it reaches the pod"
+            )
         case .active:
             if let lastLoop = data.lastLoopDate {
                 let minutes = max(0, Int(now.timeIntervalSince(lastLoop) / 60))
@@ -190,8 +198,12 @@ struct UntetheredStatusView: View {
              .starting:
             let waited = now.timeIntervalSince(manager.phaseSince)
             if data.session.startedWithoutPhone, waited > 30 {
-                return ("applewatch.radiowaves.left.and.right", .yellow, "Looking for the Pod…",
-                        "The pod hasn't answered yet. Keep the watch near it; it keeps trying")
+                return (
+                    "applewatch.radiowaves.left.and.right",
+                    .yellow,
+                    "Looking for the Pod…",
+                    "The pod hasn't answered yet. Keep the watch near it; it keeps trying"
+                )
             }
             if data.session.startedWithoutPhone {
                 return ("applewatch.radiowaves.left.and.right", .yellow, "Starting…", "Looking for the pod")
@@ -199,23 +211,39 @@ struct UntetheredStatusView: View {
             // the start goes on for up to 90 s while the link comes and goes: shown as it runs, so nobody taps again
             let seconds = Int(waited)
             if waited > 20, phoneSeemsBusy(now: now) {
-                return ("hourglass", .orange, "Reaching the iPhone… \(seconds) s",
-                        "Keep Trio open here and on the iPhone; the start goes on by itself for up to 1½ minutes")
+                return (
+                    "hourglass",
+                    .orange,
+                    "Reaching the iPhone… \(seconds) s",
+                    "Keep Trio open here and on the iPhone; the start goes on by itself for up to 1½ minutes"
+                )
             }
             if phase == .preparing {
-                return ("applewatch.radiowaves.left.and.right", .yellow, "Starting… \(seconds) s",
-                        "Agreeing with the iPhone. Keep Trio open; the iPhone doses until the watch has the pump")
+                return (
+                    "applewatch.radiowaves.left.and.right",
+                    .yellow,
+                    "Starting… \(seconds) s",
+                    "Agreeing with the iPhone. Keep Trio open; the iPhone doses until the watch has the pump"
+                )
             }
             return ("applewatch.radiowaves.left.and.right", .yellow, "Starting… \(seconds) s", "Taking over the pump and sensor")
         case .ending:
             let waited = now.timeIntervalSince(manager.phaseSince)
             if unsynced > 0 {
-                return ("arrow.uturn.backward.circle", .blue, "Handing Back…",
-                        "Sending the history to the iPhone: \(unsynced) entries left")
+                return (
+                    "arrow.uturn.backward.circle",
+                    .blue,
+                    "Handing Back…",
+                    "Sending the history to the iPhone: \(unsynced) entries left"
+                )
             }
             if waited > 30, phoneSeemsBusy(now: now) {
-                return ("hourglass", .orange, "iPhone Busy",
-                        "The iPhone isn't answering. Open Trio on the iPhone; the watch keeps the pump until it takes it")
+                return (
+                    "hourglass",
+                    .orange,
+                    "iPhone Busy",
+                    "The iPhone isn't answering. Open Trio on the iPhone; the watch keeps the pump until it takes it"
+                )
             }
             return ("arrow.uturn.backward.circle", .blue, "Handing Back…", "Waiting for the phone to take the pump")
         case .idle:
@@ -230,9 +258,14 @@ struct UntetheredStatusView: View {
 
     private var tiles: some View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
-            tile("Basal", systemImage: "chart.bar.fill", tint: .blue, value: (manager.deliveredBasalRate ?? data.lastDetermination?.rate).map {
-                String(format: "%.2f U/h", NSDecimalNumber(decimal: $0).doubleValue)
-            })
+            tile(
+                "Basal",
+                systemImage: "chart.bar.fill",
+                tint: .blue,
+                value: (manager.deliveredBasalRate ?? data.lastDetermination?.rate).map {
+                    String(format: "%.2f U/h", NSDecimalNumber(decimal: $0).doubleValue)
+                }
+            )
             // above 50 U the pod doesn't measure: the phone's "50+ U" marker
             tile("Reservoir", systemImage: "drop.fill", tint: .blue, value: data.reservoir.map {
                 // not `NSDecimalNumber.intValue`: it misreads long fractions such as the fill-based estimate's
@@ -448,7 +481,9 @@ struct UntetheredStatusView: View {
                     .foregroundStyle(.secondary)
             } else if manager.standingGrantAge != nil, manager.standingGrantPodUnknown {
                 Label {
-                    Text("The watch doesn't know the pod yet (after a pod change, or after Trio was installed again here), so it can't take over by itself. Keep Trio open here with the iPhone nearby; it looks for the pod.")
+                    Text(
+                        "The watch doesn't know the pod yet (after a pod change, or after Trio was installed again here), so it can't take over by itself. Keep Trio open here with the iPhone nearby; it looks for the pod."
+                    )
                 } icon: {
                     Image(systemName: "exclamationmark.triangle")
                 }
@@ -976,7 +1011,7 @@ struct UntetheredGlanceView: View {
             scrubSteps: .constant(0),
             pointScale: 0.45
         )
-            .allowsHitTesting(false)
+        .allowsHitTesting(false)
     }
 
     // MARK: - Elements
@@ -1074,8 +1109,10 @@ struct UntetheredGlanceView: View {
             }
         case .reservoir:
             // "50+ U" only for the pod's above-50 marker, as the Reservoir tile; unknown is "--"
-            Text(data.reservoir.map { "\(number($0, places: 0)) U" }
-                ?? (data.grant?.reservoir == Decimal(UInt32(0xDEAD_BEEF)) ? "50+ U" : "--"))
+            Text(
+                data.reservoir.map { "\(number($0, places: 0)) U" }
+                    ?? (data.grant?.reservoir == Decimal(UInt32(0xDEAD_BEEF)) ? "50+ U" : "--")
+            )
         case .lastReading:
             Text(newestReading.map { "\(minutes(since: $0, now: now))m" } ?? "--")
         case .totalDailyDose:
@@ -1186,7 +1223,10 @@ struct ManualGlucoseEntryView: View {
         .navigationTitle("Add BG")
         .onAppear {
             let start = sensorReading ?? 100
-            value = min(max(isMmol ? (Double(start) * 0.0555 * 10).rounded() / 10 : Double(start), range.lowerBound), range.upperBound)
+            value = min(
+                max(isMmol ? (Double(start) * 0.0555 * 10).rounded() / 10 : Double(start), range.lowerBound),
+                range.upperBound
+            )
         }
         .confirmationDialog("Save this BG?", isPresented: $confirmDifference) {
             Button("Save \(shown)") { save() }

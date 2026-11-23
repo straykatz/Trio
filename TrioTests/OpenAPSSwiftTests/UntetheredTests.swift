@@ -197,7 +197,10 @@ import Testing
         // no answer to the query: the phone takes the pump back
         #expect(phone.phone(.tick, now: t0 + 400) == [.takePump])
         #expect(phone.phase == .idle)
-        #expect(phone.phone(.received(.takeoverComplete(podStatus), epoch: phone.epoch), now: t0 + 401) == [.send(.revoke), .reconcile])
+        #expect(
+            phone
+                .phone(.received(.takeoverComplete(podStatus), epoch: phone.epoch), now: t0 + 401) == [.send(.revoke), .reconcile]
+        )
         #expect(phone.phase == .idle)
         // another session's report is not this one's to revoke
         #expect(phone.phone(.received(.takeoverComplete(podStatus), epoch: phone.epoch - 1), now: t0 + 402) == [])
@@ -235,7 +238,9 @@ import Testing
         #expect(phone.phase == .active)
     }
 
-    @Test("start: a commit after the watch gave up the offer is answered, and the phone takes the pump back at once") func commitAfterOfferRanOut() {
+    @Test(
+        "start: a commit after the watch gave up the offer is answered, and the phone takes the pump back at once"
+    ) func commitAfterOfferRanOut() {
         var phone = UntetheredSession()
         var watch = UntetheredSession()
         let grant = grant(lease: 60)
@@ -298,7 +303,9 @@ import Testing
         #expect(watch.phase == .idle)
     }
 
-    @Test("end: a hand-back offered without a pod reading is still offered after a relaunch") func handbackWithoutStatusSurvivesRelaunch() throws {
+    @Test(
+        "end: a hand-back offered without a pod reading is still offered after a relaunch"
+    ) func handbackWithoutStatusSurvivesRelaunch() throws {
         var (_, watch) = started()
         _ = watch.watch(.end, now: t0 + 100)
         _ = watch.watch(.handbackReady(nil), now: t0 + 100)
@@ -430,8 +437,9 @@ import Testing
         #expect(watch.isIdle)
     }
 
-    @Test("foreign session: a watch session started after the phone's forced take is adopted, not revoked")
-    func foreignSessionLaterWatchStart() {
+    @Test(
+        "foreign session: a watch session started after the phone's forced take is adopted, not revoked"
+    ) func foreignSessionLaterWatchStart() {
         var phone = UntetheredSession()
         _ = phone.phone(.foreignSessionDetected(podStatus), now: t0)
         let deadline = UntetheredSession.statusQueryGrace + UntetheredSession.statusQueryResponseTimeout
@@ -448,8 +456,9 @@ import Testing
         #expect(phone.unknownWatchSince == nil)
     }
 
-    @Test("ended watch session: its release and its last records never make the phone stand aside again")
-    func endedWatchSessionStaysEnded() {
+    @Test(
+        "ended watch session: its release and its last records never make the phone stand aside again"
+    ) func endedWatchSessionStaysEnded() {
         // the phone came back while the watch's fallback session ran: its pod command was refused, it asks
         var watch = UntetheredSession()
         _ = watch.watch(.startWithoutPhone, now: t0)
@@ -482,8 +491,9 @@ import Testing
         #expect(checking.epoch == 5000)
     }
 
-    @Test("records of a session the phone never knew: the watch is asked, not taken at its records")
-    func unknownSessionRecordsAsk() {
+    @Test(
+        "records of a session the phone never knew: the watch is asked, not taken at its records"
+    ) func unknownSessionRecordsAsk() {
         var watch = UntetheredSession()
         _ = watch.watch(.startWithoutPhone, now: t0)
         _ = watch.watch(.takeoverSucceeded(podStatus), now: t0 + 30)
@@ -685,7 +695,9 @@ import Testing
         #expect(UntetheredSensorWindow.end(now: reading, lastReading: nil) == nil)
     }
 
-    @Test("records: a session the phone gave up on keeps its history; a complete one isn't stored twice") func recordsOfEndedSessions() throws {
+    @Test(
+        "records: a session the phone gave up on keeps its history; a complete one isn't stored twice"
+    ) func recordsOfEndedSessions() throws {
         // a start the phone gave up on: idle, its history never opened
         var state = UntetheredPhoneState()
         _ = state.session.phone(.start(grant()), now: t0)
@@ -897,40 +909,47 @@ import Testing
     }
 
     #if canImport(LoopKit)
-    @Test("algorithm: pump events in the algorithm's shape and the TDD's") func pumpEventShapes() {
-        // in the past: events from the future are booked at the current time
-        let start = Date(timeIntervalSince1970: 1_700_000_000)
-        let temp = NewPumpEvent(
-            date: start,
-            dose: DoseEntry(
-                type: .tempBasal, startDate: start, endDate: start + 30 * 60, value: 2, unit: .unitsPerHour,
-                deliveredUnits: 0.6, syncIdentifier: "t"
-            ),
-            raw: Data([1]),
-            title: "temp",
-            type: .tempBasal
-        )
-        let rows = UntetheredAlgorithm.historyEvents(temp, id: "t", bolusIncrement: 0.05)
-        #expect(rows.map(\.id) == ["t", UntetheredAlgorithm.rateID("t")])
-        #expect(rows.map(\.type) == [.tempBasalDuration, .tempBasal])
-        #expect(rows.first?.durationMin == 30)
-        #expect(rows.last?.rate == 2)
-        let tdd = UntetheredAlgorithm.tddEvent(temp, id: "t", bolusIncrement: 0.05)
-        #expect(tdd?.type == .tempBasal && tdd?.amount == 2 && tdd?.duration == 30)
-        #expect(tdd?.deliveredUnits == Decimal(0.6 as Double))
+        @Test("algorithm: pump events in the algorithm's shape and the TDD's") func pumpEventShapes() {
+            // in the past: events from the future are booked at the current time
+            let start = Date(timeIntervalSince1970: 1_700_000_000)
+            let temp = NewPumpEvent(
+                date: start,
+                dose: DoseEntry(
+                    type: .tempBasal, startDate: start, endDate: start + 30 * 60, value: 2, unit: .unitsPerHour,
+                    deliveredUnits: 0.6, syncIdentifier: "t"
+                ),
+                raw: Data([1]),
+                title: "temp",
+                type: .tempBasal
+            )
+            let rows = UntetheredAlgorithm.historyEvents(temp, id: "t", bolusIncrement: 0.05)
+            #expect(rows.map(\.id) == ["t", UntetheredAlgorithm.rateID("t")])
+            #expect(rows.map(\.type) == [.tempBasalDuration, .tempBasal])
+            #expect(rows.first?.durationMin == 30)
+            #expect(rows.last?.rate == 2)
+            let tdd = UntetheredAlgorithm.tddEvent(temp, id: "t", bolusIncrement: 0.05)
+            #expect(tdd?.type == .tempBasal && tdd?.amount == 2 && tdd?.duration == 30)
+            #expect(tdd?.deliveredUnits == Decimal(0.6 as Double))
 
-        let bolus = NewPumpEvent(
-            date: start,
-            dose: DoseEntry(type: .bolus, startDate: start, value: 1.27, unit: .units, deliveredUnits: 1.27, automatic: false),
-            raw: Data([2]),
-            title: "bolus",
-            type: .bolus
-        )
-        let booked = UntetheredAlgorithm.historyEvents(bolus, id: "b", bolusIncrement: 0.05)
-        #expect(booked.first?.amount == 1.25)
-        #expect(booked.first?.isSMB == false)
-        #expect(UntetheredAlgorithm.tddEvent(bolus, id: "b", bolusIncrement: 0.05) == booked.first)
-    }
+            let bolus = NewPumpEvent(
+                date: start,
+                dose: DoseEntry(
+                    type: .bolus,
+                    startDate: start,
+                    value: 1.27,
+                    unit: .units,
+                    deliveredUnits: 1.27,
+                    automatic: false
+                ),
+                raw: Data([2]),
+                title: "bolus",
+                type: .bolus
+            )
+            let booked = UntetheredAlgorithm.historyEvents(bolus, id: "b", bolusIncrement: 0.05)
+            #expect(booked.first?.amount == 1.25)
+            #expect(booked.first?.isSMB == false)
+            #expect(UntetheredAlgorithm.tddEvent(bolus, id: "b", bolusIncrement: 0.05) == booked.first)
+        }
     #endif
 
     @Test("TDD: the watch's weighted average is the phone's formula, zeros counted") func weightedAverage() {
@@ -970,7 +989,11 @@ import Testing
         #expect(!without.useNewFormula && !without.sigmoid && without.maxIOB == 5)
         let with = OrefPipeline.determinationPreferences(preferences, dosingMode: .closed, hasSufficientTDD: true)
         #expect(with.useNewFormula && with.sigmoid)
-        let suspendOnly = OrefPipeline.determinationPreferences(preferences, dosingMode: .lowGlucoseSuspend, hasSufficientTDD: true)
+        let suspendOnly = OrefPipeline.determinationPreferences(
+            preferences,
+            dosingMode: .lowGlucoseSuspend,
+            hasSufficientTDD: true
+        )
         #expect(suspendOnly.maxIOB == 0)
     }
 
@@ -1007,8 +1030,7 @@ import Testing
         #expect(used?.timestamp == now)
     }
 
-    @Test("Build check: a hand-over only between the same builds, an older sender counts as another build")
-    func buildCheck() throws {
+    @Test("Build check: a hand-over only between the same builds, an older sender counts as another build") func buildCheck() throws {
         #expect(UntetheredVersion.mismatch(phone: "1.0.2.15 (579)", watch: "1.0.2.15 (579)") == nil)
         #expect(UntetheredVersion.mismatch(phone: "1.0.2.15 (579)", watch: "1.0.2.13 (578)") != nil)
         // nothing known on one side: not a mismatch by itself

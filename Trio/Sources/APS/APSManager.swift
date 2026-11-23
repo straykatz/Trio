@@ -874,7 +874,10 @@ final class BaseAPSManager: APSManager, Injectable {
               (PhoneLastDose.date ?? .distantPast) < refusedAt,
               !pump.status.pumpStatus.bolusing
         else {
-            debug(.bolus, "Refused bolus of \(units) U not tried again: a dose went out meanwhile, it is too late, or the phone may not dose")
+            debug(
+                .bolus,
+                "Refused bolus of \(units) U not tried again: a dose went out meanwhile, it is too late, or the phone may not dose"
+            )
             return .notTried
         }
         debug(.bolus, "Bolus of \(units) U was refused after the watch's look at the pod; the pump is back, trying once more")

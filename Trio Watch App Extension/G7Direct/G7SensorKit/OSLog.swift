@@ -1,12 +1,4 @@
-//
-//  OSLog.swift
-//  Loop
-//
-//  Copyright © 2017 LoopKit Authors. All rights reserved.
-//
-
 import os.log
-
 
 extension OSLog {
     convenience init(category: String) {

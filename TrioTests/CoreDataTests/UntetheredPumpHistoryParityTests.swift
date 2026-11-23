@@ -143,8 +143,7 @@ import Testing
         #expect(watchTotal == phoneTotal)
     }
 
-    @Test("start without the phone: the phone's bolus after the watch's copy survives the take-back")
-    func keepsInFlight() async throws {
+    @Test("start without the phone: the phone's bolus after the watch's copy survives the take-back") func keepsInFlight() async throws {
         let start = Date().addingTimeInterval(-3600)
         func bolus(_ minutes: Double, _ id: String) -> NewPumpEvent {
             NewPumpEvent(

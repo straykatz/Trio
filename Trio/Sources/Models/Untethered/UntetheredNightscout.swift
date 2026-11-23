@@ -44,7 +44,12 @@ enum UntetheredNightscout {
     static let entriesWindow: TimeInterval = 24 * 60 * 60
 
     /// As `NightscoutAPI`: the address's scheme, host and port with the API path.
-    static func request(path: String, body: Data, credentials: UntetheredNightscoutCredentials, timeout: TimeInterval) -> URLRequest? {
+    static func request(
+        path: String,
+        body: Data,
+        credentials: UntetheredNightscoutCredentials,
+        timeout: TimeInterval
+    ) -> URLRequest? {
         var components = URLComponents()
         components.scheme = credentials.url.scheme
         components.host = credentials.url.host

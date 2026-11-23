@@ -1,11 +1,3 @@
-//
-//  G7Opcode.swift
-//  CGMBLEKit
-//
-//  Created by Pete Schwamb on 9/24/22.
-//  Copyright © 2022 LoopKit Authors. All rights reserved.
-//
-
 import Foundation
 
 enum G7Opcode: UInt8 {
@@ -20,8 +12,8 @@ enum G7Opcode: UInt8 {
     /// A meter glucose for the sensor to calibrate to; see `G7CalibrateTxMessage`.
     case calibrate = 0x34
     /// Firmware version and serial number; see `TransmitterVersionMessage`.
-    case transmitterVersion = 0x4a
-    case glucoseTx = 0x4e
+    case transmitterVersion = 0x4A
+    case glucoseTx = 0x4E
     case extendedVersionTx = 0x52
     case extendedVersionRx = 0x53
     case backfillFinished = 0x59

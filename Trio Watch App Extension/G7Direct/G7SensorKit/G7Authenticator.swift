@@ -1,14 +1,3 @@
-//
-//  G7Authenticator.swift
-//  G7SensorKit
-//
-//  Copyright © 2026 LoopKit Authors. All rights reserved.
-//
-//  Derived from DexKit by Erik Tolboom (https://github.com/nightscout/DexKit):
-//  the handshake sequencing and message buffering follow its G7Authenticator.
-//  The cryptography is separate; see Crypto/.
-//
-
 import CoreBluetooth
 import Foundation
 import os.log
@@ -46,11 +35,11 @@ public enum G7AuthenticatorError: Error {
 extension G7AuthenticatorError: CustomStringConvertible {
     public var description: String {
         switch self {
-        case .timeout(let step):
+        case let .timeout(step):
             return "Timed out waiting for the sensor during \(step)."
-        case .unexpectedResponse(let step, let response):
+        case let .unexpectedResponse(step, response):
             return "Unexpected response during \(step): \(response.hexadecimalString)"
-        case .rejected(_, let failureCode):
+        case let .rejected(_, failureCode):
             switch failureCode {
             case .deviceTypeRestriction:
                 return LocalizedString(
@@ -67,7 +56,8 @@ extension G7AuthenticatorError: CustomStringConvertible {
                     "The sensor rejected this phone's key.",
                     comment: "Error description when a G7 sensor reports a key mismatch"
                 )
-            case .some(.none), nil:
+            case nil,
+                 .some(.none):
                 return LocalizedString(
                     "The sensor accepted the pairing code but refused the connection.",
                     comment: "Error description for a G7 sensor rejecting an authenticated connection with no reason given"
@@ -113,7 +103,6 @@ extension G7AuthenticatorError: CustomStringConvertible {
 /// strict request/response sequence that reads far better straight-line than
 /// as a dozen chained callbacks.
 final class G7Authenticator {
-
     struct Result {
         let sharedKey: Data
         /// The sensor's full name, learned once the link is up. Only present
@@ -198,21 +187,33 @@ final class G7Authenticator {
             throw G7AuthenticatorError.linkLost
         }
 
-        report(storedSharedKey != nil
-            ? "Authenticating with the saved key"
-            : "Pairing: running the key exchange")
+        report(
+            storedSharedKey != nil
+                ? "Authenticating with the saved key"
+                : "Pairing: running the key exchange"
+        )
 
         do {
             try peripheral.setNotifyValue(true, for: .certificate)
             try peripheral.setNotifyValue(true, for: .authentication)
         } catch {
-            report("Could not subscribe to the sensor's characteristics: \(error)"
-                + (G7Authenticator.looksLikeStaleBond(error) ? ". The link could not be secured; the phone's Bluetooth bond for this sensor may be stale (Settings › Bluetooth › forget the sensor, then pair again)" : ""))
+            report(
+                "Could not subscribe to the sensor's characteristics: \(error)"
+                    +
+                    (
+                        G7Authenticator
+                            .looksLikeStaleBond(error) ?
+                            ". The link could not be secured; the phone's Bluetooth bond for this sensor may be stale (Settings › Bluetooth › forget the sensor, then pair again)" :
+                            ""
+                    )
+            )
             throw error
         }
-        report("Characteristics: \(peripheral.describeCharacteristic(.authentication)); "
-            + "\(peripheral.describeCharacteristic(.certificate)); "
-            + "\(peripheral.describeCharacteristic(.control))")
+        report(
+            "Characteristics: \(peripheral.describeCharacteristic(.authentication)); "
+                + "\(peripheral.describeCharacteristic(.certificate)); "
+                + "\(peripheral.describeCharacteristic(.control))"
+        )
 
         // Buffer authentication traffic for the whole handshake. Its
         // acknowledgements can land while our own write is still pending, and
@@ -248,7 +249,12 @@ final class G7Authenticator {
         // pairing; so do we.
         if !didExchangeKeys, status.isAuthenticated, status.isBonded {
             report("Already authenticated and bonded")
-            return Result(sharedKey: sharedKey, deviceName: peripheral.peripheral.name, didExchangeKeys: didExchangeKeys, authenticity: .unverified)
+            return Result(
+                sharedKey: sharedKey,
+                deviceName: peripheral.peripheral.name,
+                didExchangeKeys: didExchangeKeys,
+                authenticity: .unverified
+            )
         }
 
         // Trio: from EJM0's G7SensorKit (ae7c731). Authenticated but not bonded (bond=2) on a reconnect: the key
@@ -322,8 +328,14 @@ final class G7Authenticator {
         try peripheral.writeCertificateBytes(ourRound3)
         let deriveSeconds = Date().timeIntervalSince(deriveStart)
 
-        report(String(format: "Key exchange complete (compute: rounds 1-2 %.0f ms before the first request, round 3 %.0f ms, secret %.0f ms)",
-                      precomputeSeconds * 1000, round3Seconds * 1000, deriveSeconds * 1000))
+        report(
+            String(
+                format: "Key exchange complete (compute: rounds 1-2 %.0f ms before the first request, round 3 %.0f ms, secret %.0f ms)",
+                precomputeSeconds * 1000,
+                round3Seconds * 1000,
+                deriveSeconds * 1000
+            )
+        )
 
         // Advisory only: the sensor does not require us to check its proofs,
         // and the AES challenge below is the real gate. On hardware they do
@@ -367,7 +379,11 @@ final class G7Authenticator {
         let step = "challenge"
         let challenge = G7JPAKE.secureRandomBytes(8)
         report("Challenge: sending ours as display type \(displayType)")
-        try peripheral.writeValue(Data([0x02]) + challenge + Data([displayType.rawValue]), for: .authentication, type: .withResponse)
+        try peripheral.writeValue(
+            Data([0x02]) + challenge + Data([displayType.rawValue]),
+            for: .authentication,
+            type: .withResponse
+        )
 
         let response = try waitForAuthentication(authentication, prefix: 0x03, step: step)
         guard response.count >= 17 else {
@@ -563,7 +579,7 @@ final class G7Authenticator {
     /// sensor wants an encrypted link and the phone could not provide one,
     /// which is what a bond the sensor no longer recognizes looks like.
     static func looksLikeStaleBond(_ error: Error) -> Bool {
-        guard case PeripheralManagerError.cbPeripheralError(let underlying) = error,
+        guard case let PeripheralManagerError.cbPeripheralError(underlying) = error,
               let attError = underlying as? CBATTError
         else {
             return false

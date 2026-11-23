@@ -61,10 +61,13 @@ struct WatchG7View: View {
                         }
                     }
                 } else {
-                    Text("Reads your G7 when the iPhone is away. No dosing.", comment: "One-line explanation under the watch sensor toggle")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+                    Text(
+                        "Reads your G7 when the iPhone is away. No dosing.",
+                        comment: "One-line explanation under the watch sensor toggle"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
 
                     // the watch starts by itself only once this reader has readings of its own
                     if WatchState.shared.fallbackLoop, WatchState.shared.untetheredMode,
@@ -178,12 +181,21 @@ struct WatchG7DetailsView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     row(String(localized: "Sensor", comment: "Watch sensor details label"), reader.sensorName ?? "–")
-                    row(String(localized: "Code", comment: "Watch sensor details label: pairing code received"), reader.pairingCode == nil ? "–" : "✓")
-                    row(String(localized: "Paired", comment: "Watch sensor details label: the watch has its own key"), reader.hasWatchKey ? "✓" : "–")
+                    row(
+                        String(localized: "Code", comment: "Watch sensor details label: pairing code received"),
+                        reader.pairingCode == nil ? "–" : "✓"
+                    )
+                    row(
+                        String(localized: "Paired", comment: "Watch sensor details label: the watch has its own key"),
+                        reader.hasWatchKey ? "✓" : "–"
+                    )
                     row(String(localized: "Connected", comment: "Watch sensor details label"), reader.isConnected ? "✓" : "–")
                     let coverage = reader.recentCoverage
                     row(
-                        String(localized: "Last 2 h", comment: "Watch sensor details label: readings received in the last two hours"),
+                        String(
+                            localized: "Last 2 h",
+                            comment: "Watch sensor details label: readings received in the last two hours"
+                        ),
                         "\(coverage.count)/\(coverage.expected) · max gap \(coverage.longestGapMinutes) min"
                             + (coverage.filledIn > 0 ? " · +\(coverage.filledIn) filled" : "")
                     )
@@ -192,7 +204,10 @@ struct WatchG7DetailsView: View {
                     let watchReading = [reader.latest?.date, UntetheredWatchManager.shared.ownSessionReadingDate]
                         .compactMap { $0 }.max()
                     row(
-                        String(localized: "Watch BG", comment: "Watch sensor details label: age of the watch's own newest glucose"),
+                        String(
+                            localized: "Watch BG",
+                            comment: "Watch sensor details label: age of the watch's own newest glucose"
+                        ),
                         watchReading.map { minutesAgo($0) } ?? "–"
                     )
                     row(
@@ -200,15 +215,20 @@ struct WatchG7DetailsView: View {
                         reader.phoneGlucoseDate.map { minutesAgo($0) } ?? "–"
                     )
                     row(
-                        String(localized: "iPhone link", comment: "Watch sensor details label: age of the last update from the phone"),
+                        String(
+                            localized: "iPhone link",
+                            comment: "Watch sensor details label: age of the last update from the phone"
+                        ),
                         reader.lastPhoneContact.map { minutesAgo($0) } ?? "–"
                     )
                     if let problem = reader.sensorProblem {
-                        row(String(localized: "State", comment: "Watch sensor details label: sensor state without a reading"), problem)
+                        row(
+                            String(localized: "State", comment: "Watch sensor details label: sensor state without a reading"),
+                            problem
+                        )
                     }
                 }
                 .font(.caption2)
-
 
                 if !reader.logLines.isEmpty {
                     Divider()
@@ -267,6 +287,9 @@ struct WatchG7DetailsView: View {
 
     private func minutesAgo(_ date: Date) -> String {
         let minutes = max(0, Int(Date().timeIntervalSince(date) / 60))
-        return String(localized: "\(minutes) min ago", comment: "Watch sensor details: minutes since a reading or an iPhone update")
+        return String(
+            localized: "\(minutes) min ago",
+            comment: "Watch sensor details: minutes since a reading or an iPhone update"
+        )
     }
 }

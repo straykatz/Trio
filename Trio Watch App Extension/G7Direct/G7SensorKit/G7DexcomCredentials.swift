@@ -1,10 +1,3 @@
-//
-//  G7DexcomCredentials.swift
-//  G7SensorKit
-//
-//  Copyright © 2026 LoopKit Authors. All rights reserved.
-//
-
 import Foundation
 
 /// Fixed credential material the sensor expects during the certificate phase
@@ -19,7 +12,6 @@ import Foundation
 /// The leaf certificate expired 2025-04-13. Sensors do not enforce leaf
 /// expiry, so this is not a bug to fix.
 enum G7DexcomCredentials {
-
     /// The two DER-encoded X.509 certificates, in the order the sensor asks
     /// for them (index 0, then index 1).
     static var certificates: [Data] {

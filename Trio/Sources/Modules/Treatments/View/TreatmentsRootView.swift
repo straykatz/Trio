@@ -174,7 +174,8 @@ extension Treatments {
                         ForEach(state.mealTimeReminderPresets, id: \.self) { preset in
                             reminderPresetPill(
                                 minutes: Int(preset),
-                                label: "\(Int(preset)) " + String(localized: "min", comment: "Units for meal-time reminder lead time")
+                                label: "\(Int(preset)) " +
+                                    String(localized: "min", comment: "Units for meal-time reminder lead time")
                             )
                         }
                     }

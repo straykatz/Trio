@@ -44,9 +44,9 @@ import WatchKit
     /// Back from untethered mode, until the first reading arrives.
     private(set) var isReconnecting = false
     /// The sensor's state when it last answered without a usable reading (warm-up, failed, ...).
-    private(set) var sensorProblem: String? = nil
+    private(set) var sensorProblem: String?
     /// The same as a few words for the first page, so a missing reading is put down to the sensor, not the watch.
-    private(set) var sensorProblemLabel: String? = nil
+    private(set) var sensorProblemLabel: String?
     /// Answers in a row with a temporary sensor issue; the second raises "Sensor Issue".
     @ObservationIgnored private var temporaryIssueCount = 0
     private(set) var logLines: [String] = []
@@ -150,7 +150,8 @@ import WatchKit
         }
         // The log survives restarts, so a gap can still be looked at afterwards.
         logLines = defaults.stringArray(forKey: Key.log) ?? []
-        liveReadingDates = (defaults.array(forKey: Key.liveReadings) as? [TimeInterval] ?? []).map(Date.init(timeIntervalSince1970:))
+        liveReadingDates = (defaults.array(forKey: Key.liveReadings) as? [TimeInterval] ?? [])
+            .map(Date.init(timeIntervalSince1970:))
         asideSpans = defaults.array(forKey: Key.asideSpans) as? [[TimeInterval]] ?? []
     }
 
@@ -465,7 +466,10 @@ import WatchKit
                 )
                 session?.update(credentials: credentials)
             } else {
-                appendLog(isEnabled ? "Watch mode over: reading again" : "Watch mode over: the watch sensor is switched off, not reading")
+                appendLog(
+                    isEnabled ? "Watch mode over: reading again" :
+                        "Watch mode over: the watch sensor is switched off, not reading"
+                )
             }
             isReconnecting = true
             // the reminder below counts from here until the first reading of our own
@@ -696,7 +700,9 @@ import WatchKit
         task.expirationHandler = { [weak self, weak task] in
             let expire = {
                 let granted = Date().timeIntervalSince(since)
-                Task { await WatchLogger.shared.log(String(format: "⌚️🩸 G7: Bluetooth wake expired by the system after %.1f s", granted)) }
+                Task {
+                    await WatchLogger.shared
+                        .log(String(format: "⌚️🩸 G7: Bluetooth wake expired by the system after %.1f s", granted)) }
                 if let task { self?.completeHeldBluetoothTask(task) }
             }
             if Thread.isMainThread { expire() } else { DispatchQueue.main.sync(execute: expire) }
@@ -798,9 +804,18 @@ import WatchKit
 
         var title: String {
             switch self {
-            case .failed: return String(localized: "Sensor Failed", comment: "Watch G7 alert title: the sensor reports it has failed")
-            case .ended: return String(localized: "Sensor Session Ended", comment: "Watch G7 alert title: the sensor's session is over")
-            case .issue: return String(localized: "Sensor Issue", comment: "Watch G7 alert title: the sensor reports a temporary problem")
+            case .failed: return String(
+                    localized: "Sensor Failed",
+                    comment: "Watch G7 alert title: the sensor reports it has failed"
+                )
+            case .ended: return String(
+                    localized: "Sensor Session Ended",
+                    comment: "Watch G7 alert title: the sensor's session is over"
+                )
+            case .issue: return String(
+                    localized: "Sensor Issue",
+                    comment: "Watch G7 alert title: the sensor reports a temporary problem"
+                )
             }
         }
 
@@ -837,7 +852,10 @@ import WatchKit
         } else if state.isInWarmup {
             sensorProblemLabel = String(localized: "Sensor warming up", comment: "Watch first page: the sensor is warming up")
         } else {
-            sensorProblemLabel = String(localized: "Sensor issue", comment: "Watch first page: the sensor sends no glucose for now")
+            sensorProblemLabel = String(
+                localized: "Sensor issue",
+                comment: "Watch first page: the sensor sends no glucose for now"
+            )
             temporaryIssueCount += 1
             if temporaryIssueCount >= 2 { raiseSensorAlert(.issue) }
         }

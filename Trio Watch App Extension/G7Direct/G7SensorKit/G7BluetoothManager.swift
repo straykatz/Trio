@@ -1,19 +1,6 @@
-//
-//  G7BluetoothManager.swift
-//  CGMBLEKit
-//
-//  Created by Pete Schwamb on 11/11/22.
-//  Copyright © 2022 LoopKit Authors. All rights reserved.
-//
-//  Active-peripheral tracking, the powered-on recheck and central recreation
-//  are derived from DexKit by Erik Tolboom
-//  (https://github.com/nightscout/DexKit).
-//
-
 import CoreBluetooth
 import Foundation
 import os.log
-
 
 enum PeripheralConnectionCommand {
     case connect
@@ -23,8 +10,12 @@ enum PeripheralConnectionCommand {
 
 protocol G7BluetoothManagerDelegate: AnyObject {
     /// A signal-strength reading for a connected peripheral, requested with `readRSSI()`.
-    func bluetoothManager(_ manager: G7BluetoothManager, peripheralManager: G7PeripheralManager, didReadRSSI rssi: NSNumber, error: Error?)
-
+    func bluetoothManager(
+        _ manager: G7BluetoothManager,
+        peripheralManager: G7PeripheralManager,
+        didReadRSSI rssi: NSNumber,
+        error: Error?
+    )
 
     /**
      Tells the delegate that the bluetooth manager has finished connecting to and discovering all required services of its peripheral
@@ -54,7 +45,12 @@ protocol G7BluetoothManagerDelegate: AnyObject {
 
      - returns: PeripheralConnectionCommand indicating what should be done with this peripheral
      */
-    func bluetoothManager(_ manager: G7BluetoothManager, shouldConnectPeripheral peripheral: CBPeripheral, advertisementData: [String: Any], rssi: NSNumber) -> PeripheralConnectionCommand
+    func bluetoothManager(
+        _ manager: G7BluetoothManager,
+        shouldConnectPeripheral peripheral: CBPeripheral,
+        advertisementData: [String: Any],
+        rssi: NSNumber
+    ) -> PeripheralConnectionCommand
 
     /**
      Asks the delegate whether peripherals restored by CoreBluetooth's state
@@ -72,7 +68,11 @@ protocol G7BluetoothManagerDelegate: AnyObject {
     ///   - manager: The bluetooth manager
     ///   - peripheralManager: The peripheral manager
     ///   - response: The data received on the control characteristic
-    func bluetoothManager(_ manager: G7BluetoothManager, peripheralManager: G7PeripheralManager, didReceiveControlResponse response: Data)
+    func bluetoothManager(
+        _ manager: G7BluetoothManager,
+        peripheralManager: G7PeripheralManager,
+        didReceiveControlResponse response: Data
+    )
 
     /// Informs the delegate that the bluetooth manager received new data in the backfill characteristic
     ///
@@ -87,7 +87,11 @@ protocol G7BluetoothManagerDelegate: AnyObject {
     ///   - manager: The bluetooth manager
     ///   - peripheralManager: The peripheral manager
     ///   - response: The data received on the authentication characteristic
-    func bluetoothManager(_ manager: G7BluetoothManager, peripheralManager: G7PeripheralManager, didReceiveAuthenticationResponse response: Data)
+    func bluetoothManager(
+        _ manager: G7BluetoothManager,
+        peripheralManager: G7PeripheralManager,
+        didReceiveAuthenticationResponse response: Data
+    )
 
     /// Informs the delegate that the bluetooth manager started or stopped scanning
     ///
@@ -116,11 +120,16 @@ protocol G7BluetoothManagerDelegate: AnyObject {
 }
 
 extension G7BluetoothManagerDelegate {
-    func bluetoothManager(_ manager: G7BluetoothManager, peripheralManager: G7PeripheralManager, didReadRSSI rssi: NSNumber, error: Error?) {}
-    func bluetoothManager(_ manager: G7BluetoothManager, logEvent line: String) {}
-    func bluetoothManagerCanAuthenticate(_ manager: G7BluetoothManager) -> Bool { true }
-    func bluetoothManager(_ manager: G7BluetoothManager, didAdoptPeripheral identifier: UUID?) {}
-    func bluetoothManagerStatusDidChange(_ manager: G7BluetoothManager) {}
+    func bluetoothManager(
+        _: G7BluetoothManager,
+        peripheralManager _: G7PeripheralManager,
+        didReadRSSI _: NSNumber,
+        error _: Error?
+    ) {}
+    func bluetoothManager(_: G7BluetoothManager, logEvent _: String) {}
+    func bluetoothManagerCanAuthenticate(_: G7BluetoothManager) -> Bool { true }
+    func bluetoothManager(_: G7BluetoothManager, didAdoptPeripheral _: UUID?) {}
+    func bluetoothManagerStatusDidChange(_: G7BluetoothManager) {}
 }
 
 /// Takes over acquisition where a platform cannot use the stock steps (watchOS: the app sleeps
@@ -152,13 +161,12 @@ protocol G7AcquisitionArm: AnyObject {
 }
 
 class G7BluetoothManager: NSObject {
-
     weak var delegate: G7BluetoothManagerDelegate?
 
     private let log = OSLog(category: "G7BluetoothManager")
 
     /// Isolated to `managerQueue`
-    var centralManager: CBCentralManager! = nil
+    var centralManager: CBCentralManager!
 
     /// Whether the radio is usable: off, unauthorized, or on. Readable from
     /// any queue; changes are announced through
@@ -169,13 +177,11 @@ class G7BluetoothManager: NSObject {
 
     /// Isolated to `managerQueue`
     var activePeripheral: CBPeripheral? {
-        get {
-            return activePeripheralManager?.peripheral
-        }
+        activePeripheralManager?.peripheral
     }
 
     /// Isolated to `managerQueue`
-    var managedPeripherals: [UUID:G7PeripheralManager] = [:]
+    var managedPeripherals: [UUID: G7PeripheralManager] = [:]
 
     /// The platform's acquisition arm, or nil for the stock steps. Set once in init, before the
     /// central can call back.
@@ -203,10 +209,9 @@ class G7BluetoothManager: NSObject {
     }
 
     var activePeripheralIdentifier: UUID? {
-        get {
-            return lockedPeripheralIdentifier.value
-        }
+        lockedPeripheralIdentifier.value
     }
+
     private let lockedPeripheralIdentifier: Locked<UUID?> = Locked(nil)
 
     /// Targets a known peripheral directly, so a relaunch can retrieve it by
@@ -255,9 +260,9 @@ class G7BluetoothManager: NSObject {
 
         managerQueue.sync {
             #if os(watchOS)
-            self.acquisitionArm = G7WatchAcquisition(manager: self)
+                self.acquisitionArm = G7WatchAcquisition(manager: self)
             #else
-            self.acquisitionArm = nil
+                self.acquisitionArm = nil
             #endif
             self.centralManager = self.makeCentralManager(queue: self.managerQueue)
         }
@@ -270,7 +275,11 @@ class G7BluetoothManager: NSObject {
         // Trio: its own restore identifier. Untethered mode's G7CGMManager (the linked G7SensorKit
         // framework) runs a second central in this app with "com.loudnate.CGMBLEKit"; two centrals may
         // not share one.
-        return CBCentralManager(delegate: self, queue: queue, options: [CBCentralManagerOptionRestoreIdentifierKey: "org.nightscout.Trio.watchG7Reader"])
+        CBCentralManager(
+            delegate: self,
+            queue: queue,
+            options: [CBCentralManagerOptionRestoreIdentifierKey: "org.nightscout.Trio.watchG7Reader"]
+        )
     }
 
     // MARK: - Actions
@@ -404,10 +413,13 @@ class G7BluetoothManager: NSObject {
         }
     }
 
-    func centralManager(_ central: CBCentralManager, connectionEventDidOccur event: CBConnectionEvent, for peripheral: CBPeripheral) {
+    func centralManager(_: CBCentralManager, connectionEventDidOccur _: CBConnectionEvent, for peripheral: CBPeripheral) {
         managerQueue.async {
             if self.activePeripheralIdentifier == nil {
-                self.log.default("Discovered peripheral from connectionEventDidOccur %{public}@", peripheral.identifier.uuidString)
+                self.log.default(
+                    "Discovered peripheral from connectionEventDidOccur %{public}@",
+                    peripheral.identifier.uuidString
+                )
                 self.handleDiscoveredPeripheral(peripheral)
             }
         }
@@ -443,12 +455,18 @@ class G7BluetoothManager: NSObject {
             return
         }
 
-        if let peripheralID = activePeripheralIdentifier, let peripheral = centralManager.retrievePeripherals(withIdentifiers: [peripheralID]).first {
+        if let peripheralID = activePeripheralIdentifier,
+           let peripheral = centralManager.retrievePeripherals(withIdentifiers: [peripheralID]).first
+        {
             log.default("Retrieved peripheral %{public}@", peripheral.identifier.uuidString)
             handleDiscoveredPeripheral(peripheral)
         } else {
             if let peripheralID = activePeripheralIdentifier {
-                log.default("Could not retrieve peripheral %{public}@; active peripheral %{public}@", peripheralID.uuidString, activePeripheral?.identifier.uuidString ?? "none")
+                log.default(
+                    "Could not retrieve peripheral %{public}@; active peripheral %{public}@",
+                    peripheralID.uuidString,
+                    activePeripheral?.identifier.uuidString ?? "none"
+                )
             }
             for peripheral in centralManager.retrieveConnectedPeripherals(withServices: [
                 SensorServiceUUID.advertisement.cbUUID,
@@ -467,7 +485,8 @@ class G7BluetoothManager: NSObject {
                 SensorServiceUUID.cgmService.cbUUID
             ]])
 
-            centralManager.scanForPeripherals(withServices: [
+            centralManager.scanForPeripherals(
+                withServices: [
                     SensorServiceUUID.advertisement.cbUUID
                 ],
                 options: nil
@@ -523,7 +542,10 @@ class G7BluetoothManager: NSObject {
                self.centralRecreationCount < G7BluetoothManager.maximumCentralRecreations,
                self.managedPeripherals.isEmpty
             {
-                self.log.error("Recreating central manager stuck at %{public}@", String(describing: self.centralManager.state.rawValue))
+                self.log.error(
+                    "Recreating central manager stuck at %{public}@",
+                    String(describing: self.centralManager.state.rawValue)
+                )
                 self.centralRecreationCount += 1
                 self.poweredOnRecheckCount = 0
                 self.centralManager.delegate = nil
@@ -580,7 +602,12 @@ class G7BluetoothManager: NSObject {
         dispatchPrecondition(condition: .onQueue(managerQueue))
 
         if let delegate = delegate {
-            switch delegate.bluetoothManager(self, shouldConnectPeripheral: peripheral, advertisementData: advertisementData, rssi: rssi) {
+            switch delegate.bluetoothManager(
+                self,
+                shouldConnectPeripheral: peripheral,
+                advertisementData: advertisementData,
+                rssi: rssi
+            ) {
             case .makeActive:
                 log.default("Making peripheral active: %{public}@", peripheral.identifier.uuidString)
 
@@ -593,29 +620,29 @@ class G7BluetoothManager: NSObject {
                     activePeripheralManager = makeOrReusePeripheralManager(peripheral)
                     activePeripheralManager?.delegate = self
                 }
-                self.managedPeripherals[peripheral.identifier] = activePeripheralManager
+                managedPeripherals[peripheral.identifier] = activePeripheralManager
                 if let arm = acquisitionArm {
                     arm.found(peripheral)
                 } else {
-                    self.centralManager.connect(peripheral)
+                    centralManager.connect(peripheral)
                 }
 
             case .connect:
                 // Pairing hears repeat advertisements from the same candidate;
                 // building a second manager for one peripheral leaves the first
                 // as an orphaned delegate and loses handshake traffic.
-                if let existingManager = self.managedPeripherals[peripheral.identifier] {
+                if let existingManager = managedPeripherals[peripheral.identifier] {
                     existingManager.peripheral = peripheral
                     if peripheral.state != .connected, peripheral.state != .connecting {
                         log.default("Reconnecting to peripheral: %{public}@", peripheral.identifier.uuidString)
-                        self.centralManager.connect(peripheral)
+                        centralManager.connect(peripheral)
                     }
                 } else {
                     log.default("Connecting to peripheral: %{public}@", peripheral.identifier.uuidString)
                     let peripheralManager = makeOrReusePeripheralManager(peripheral)
                     peripheralManager.delegate = self
-                    self.managedPeripherals[peripheral.identifier] = peripheralManager
-                    self.centralManager.connect(peripheral)
+                    managedPeripherals[peripheral.identifier] = peripheralManager
+                    centralManager.connect(peripheral)
                 }
             case .ignore:
                 break
@@ -624,13 +651,12 @@ class G7BluetoothManager: NSObject {
     }
 
     override var debugDescription: String {
-        return [
+        [
             "## BluetoothManager",
-            activePeripheralManager.map(String.init(reflecting:)) ?? "No peripheral",
+            activePeripheralManager.map(String.init(reflecting:)) ?? "No peripheral"
         ].joined(separator: "\n")
     }
 }
-
 
 extension G7BluetoothManager: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
@@ -642,7 +668,11 @@ extension G7BluetoothManager: CBCentralManagerDelegate {
         switch central.state {
         case .poweredOn:
             managerQueue_scanForPeripheral()
-        case .resetting, .poweredOff, .unauthorized, .unknown, .unsupported:
+        case .poweredOff,
+             .resetting,
+             .unauthorized,
+             .unknown,
+             .unsupported:
             fallthrough
         @unknown default:
             acquisitionArm?.radioDown()
@@ -655,7 +685,7 @@ extension G7BluetoothManager: CBCentralManagerDelegate {
     }
 
     // A daemon-held connect relaunches the app for the link; this is where the relaunch hands it back.
-    func centralManager(_ central: CBCentralManager, willRestoreState dict: [String : Any]) {
+    func centralManager(_: CBCentralManager, willRestoreState dict: [String: Any]) {
         dispatchPrecondition(condition: .onQueue(managerQueue))
 
         guard delegate?.bluetoothManagerShouldAcceptRestoredPeripherals(self) ?? true else {
@@ -676,7 +706,12 @@ extension G7BluetoothManager: CBCentralManagerDelegate {
         }
     }
 
-    func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
+    func centralManager(
+        _: CBCentralManager,
+        didDiscover peripheral: CBPeripheral,
+        advertisementData: [String: Any],
+        rssi RSSI: NSNumber
+    ) {
         dispatchPrecondition(condition: .onQueue(managerQueue))
 
         log.default("%{public}@: %{public}@, data = %{public}@", #function, peripheral, String(describing: advertisementData))
@@ -703,14 +738,14 @@ extension G7BluetoothManager: CBCentralManagerDelegate {
         }
     }
 
-    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+    func centralManager(_: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         dispatchPrecondition(condition: .onQueue(managerQueue))
         log.default("%{public}@: %{public}@", #function, peripheral)
         // Ignore errors indicating the peripheral disconnected remotely, as that's expected behavior
         if let error = error as NSError?, CBError(_nsError: error).code != .peripheralDisconnected {
             log.error("%{public}@: %{public}@", #function, error)
             if let peripheralManager = activePeripheralManager {
-                self.delegate?.bluetoothManager(self, readyingFailed: peripheralManager, with: error)
+                delegate?.bluetoothManager(self, readyingFailed: peripheralManager, with: error)
             }
         }
 
@@ -721,7 +756,7 @@ extension G7BluetoothManager: CBCentralManagerDelegate {
             } else {
                 remoteDisconnect = false
             }
-            self.delegate?.peripheralDidDisconnect(self, peripheralManager: peripheralManager, wasRemoteDisconnect: remoteDisconnect)
+            delegate?.peripheralDidDisconnect(self, peripheralManager: peripheralManager, wasRemoteDisconnect: remoteDisconnect)
         }
 
         if peripheral != activePeripheral {
@@ -732,12 +767,12 @@ extension G7BluetoothManager: CBCentralManagerDelegate {
         scanAfterDelay()
     }
 
-    func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+    func centralManager(_: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         dispatchPrecondition(condition: .onQueue(managerQueue))
 
         log.error("%{public}@: %{public}@", #function, String(describing: error))
         if let error = error, let peripheralManager = activePeripheralManager {
-            self.delegate?.bluetoothManager(self, readyingFailed: peripheralManager, with: error)
+            delegate?.bluetoothManager(self, readyingFailed: peripheralManager, with: error)
         }
 
         if acquisitionArm?.failedToConnect(peripheral, error: error) == true { return }
@@ -750,20 +785,16 @@ extension G7BluetoothManager: CBCentralManagerDelegate {
     }
 }
 
-
 extension G7BluetoothManager: G7PeripheralManagerDelegate {
     func peripheralManager(_ manager: G7PeripheralManager, didReadRSSI RSSI: NSNumber, error: Error?) {
         delegate?.bluetoothManager(self, peripheralManager: manager, didReadRSSI: RSSI, error: error)
     }
 
-    func peripheralManagerDidUpdateName(_ manager: G7PeripheralManager) {
-    }
+    func peripheralManagerDidUpdateName(_: G7PeripheralManager) {}
 
-    func peripheralManagerDidConnect(_ manager: G7PeripheralManager) {
-    }
+    func peripheralManagerDidConnect(_: G7PeripheralManager) {}
 
-    func completeConfiguration(for manager: G7PeripheralManager) throws {
-    }
+    func completeConfiguration(for _: G7PeripheralManager) throws {}
 
     func peripheralManager(_ manager: G7PeripheralManager, didUpdateValueFor characteristic: CBCharacteristic) {
         guard let value = characteristic.value else {
@@ -771,16 +802,18 @@ extension G7BluetoothManager: G7PeripheralManagerDelegate {
         }
 
         switch CGMServiceCharacteristicUUID(rawValue: characteristic.uuid.uuidString.uppercased()) {
-        case .none, .communication?, .certificate?:
+        case .certificate?,
+             .communication?,
+             .none:
             // The certificate characteristic only carries handshake payloads,
             // which the authenticator collects through an installed handler.
             return
         case .control?:
-            self.delegate?.bluetoothManager(self, peripheralManager: manager, didReceiveControlResponse: value)
+            delegate?.bluetoothManager(self, peripheralManager: manager, didReceiveControlResponse: value)
         case .backfill?:
-            self.delegate?.bluetoothManager(self, didReceiveBackfillResponse: value)
+            delegate?.bluetoothManager(self, didReceiveBackfillResponse: value)
         case .authentication?:
-            self.delegate?.bluetoothManager(self, peripheralManager: manager, didReceiveAuthenticationResponse: value)
+            delegate?.bluetoothManager(self, peripheralManager: manager, didReceiveAuthenticationResponse: value)
         }
     }
 }

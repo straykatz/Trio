@@ -1,10 +1,3 @@
-//
-//  G7AES.swift
-//  G7SensorKit
-//
-//  Copyright © 2026 LoopKit Authors. All rights reserved.
-//
-
 import CommonCrypto
 import Foundation
 
@@ -15,7 +8,6 @@ enum G7AESError: Error {
 }
 
 enum G7AES {
-
     /// Dexcom's challenge transform: the 8-byte challenge is repeated to fill
     /// one AES block, encrypted under the session key in ECB mode, and the
     /// first 8 bytes of the result are the answer. Both sides compute it, and

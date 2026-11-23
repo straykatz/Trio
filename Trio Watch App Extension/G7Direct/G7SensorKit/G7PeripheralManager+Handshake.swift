@@ -1,10 +1,3 @@
-//
-//  G7PeripheralManager+Handshake.swift
-//  G7SensorKit
-//
-//  Copyright © 2026 LoopKit Authors. All rights reserved.
-//
-
 import CoreBluetooth
 import Foundation
 
@@ -12,7 +5,6 @@ import Foundation
 /// terms of "the authentication characteristic" rather than resolving
 /// `CBCharacteristic` objects at every step.
 extension G7PeripheralManager {
-
     /// The largest payload the sensor accepts in one write on the certificate
     /// characteristic. Fixed at the classic ATT default rather than negotiated:
     /// the sensor reassembles by byte count, and a larger MTU buys nothing.

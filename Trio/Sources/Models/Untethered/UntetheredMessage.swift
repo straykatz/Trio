@@ -185,40 +185,45 @@ struct UntetheredTempBasal: Codable, Equatable {
 }
 
 #if canImport(LoopKit)
-extension PumpManager {
-    /// The running temp basal at a hand-over. A low or zero one is cancelled and returned to be set again on the other
-    /// side. A high one is never set again: cancelled here when `cancellingHigh`, otherwise left running and returned
-    /// as `leftRunning` for the phone to cancel once it has the pod, as LoopKit/Loop#2545 does. Both nil when none ran,
-    /// or when the pump didn't take the cancel, which leaves it running as before.
-    func handOverTempBasal(
-        scheduledRate: Decimal,
-        cancellingHigh: Bool
-    ) async -> (resume: UntetheredTempBasal?, leftRunning: UntetheredTempBasal?) {
-        guard case let .tempBasal(dose) = status.basalDeliveryState, dose.endDate > Date() else { return (nil, nil) }
-        let temp = UntetheredTempBasal(unitsPerHour: dose.unitsPerHour, endsAt: dose.endDate, syncIdentifier: dose.syncIdentifier)
-        let isHigh = temp.isHigh(scheduledRate: scheduledRate)
-        if isHigh, !cancellingHigh { return (nil, temp) }
-        guard await cancelTempBasal() == nil else { return (nil, nil) }
-        return (isHigh ? nil : temp, nil)
-    }
+    extension PumpManager {
+        /// The running temp basal at a hand-over. A low or zero one is cancelled and returned to be set again on the other
+        /// side. A high one is never set again: cancelled here when `cancellingHigh`, otherwise left running and returned
+        /// as `leftRunning` for the phone to cancel once it has the pod, as LoopKit/Loop#2545 does. Both nil when none ran,
+        /// or when the pump didn't take the cancel, which leaves it running as before.
+        func handOverTempBasal(
+            scheduledRate: Decimal,
+            cancellingHigh: Bool
+        ) async -> (resume: UntetheredTempBasal?, leftRunning: UntetheredTempBasal?) {
+            guard case let .tempBasal(dose) = status.basalDeliveryState, dose.endDate > Date() else { return (nil, nil) }
+            let temp = UntetheredTempBasal(
+                unitsPerHour: dose.unitsPerHour,
+                endsAt: dose.endDate,
+                syncIdentifier: dose.syncIdentifier
+            )
+            let isHigh = temp.isHigh(scheduledRate: scheduledRate)
+            if isHigh, !cancellingHigh { return (nil, temp) }
+            guard await cancelTempBasal() == nil else { return (nil, nil) }
+            return (isHigh ? nil : temp, nil)
+        }
 
-    /// Cancels whatever temp basal the pod runs, one this controller set or another's.
-    func cancelTempBasal() async -> PumpManagerError? {
-        await withCheckedContinuation { continuation in
-            enactTempBasal(decisionId: nil, unitsPerHour: 0, for: 0) { continuation.resume(returning: $0) }
+        /// Cancels whatever temp basal the pod runs, one this controller set or another's.
+        func cancelTempBasal() async -> PumpManagerError? {
+            await withCheckedContinuation { continuation in
+                enactTempBasal(decisionId: nil, unitsPerHour: 0, for: 0) { continuation.resume(returning: $0) }
+            }
+        }
+
+        /// Sets a handed-over temp basal again for what was left: the pump's error, or nil when set or already over.
+        func resumeTempBasal(_ temp: UntetheredTempBasal) async -> PumpManagerError? {
+            guard let durations = (self as? PumpDeliveryOdometer)?.supportedTempBasalDurations,
+                  let duration = temp.remainingDuration(at: Date(), supportedDurations: durations)
+            else { return nil }
+            return await withCheckedContinuation { continuation in
+                enactTempBasal(decisionId: nil, unitsPerHour: temp.unitsPerHour, for: duration) {
+                    continuation.resume(returning: $0) }
+            }
         }
     }
-
-    /// Sets a handed-over temp basal again for what was left: the pump's error, or nil when set or already over.
-    func resumeTempBasal(_ temp: UntetheredTempBasal) async -> PumpManagerError? {
-        guard let durations = (self as? PumpDeliveryOdometer)?.supportedTempBasalDurations,
-              let duration = temp.remainingDuration(at: Date(), supportedDurations: durations)
-        else { return nil }
-        return await withCheckedContinuation { continuation in
-            enactTempBasal(decisionId: nil, unitsPerHour: temp.unitsPerHour, for: duration) { continuation.resume(returning: $0) }
-        }
-    }
-}
 #endif
 
 /// Everything the watch needs to run the loop: the pump and CGM, therapy settings and 24 h of history.

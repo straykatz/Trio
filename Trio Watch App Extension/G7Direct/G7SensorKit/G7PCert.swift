@@ -1,10 +1,3 @@
-//
-//  G7PCert.swift
-//  G7SensorKit
-//
-//  Copyright © 2026 LoopKit Authors. All rights reserved.
-//
-
 import Foundation
 
 enum G7PCertError: Error {

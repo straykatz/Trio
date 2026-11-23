@@ -1,10 +1,3 @@
-//
-//  G7SensorIdentity.swift
-//  G7SensorKit
-//
-//  Copyright © 2026 LoopKit Authors. All rights reserved.
-//
-
 import CryptoKit
 import Foundation
 import Security
@@ -28,7 +21,6 @@ public enum G7SensorAuthenticity: String, Equatable {
 }
 
 enum G7SensorIdentity {
-
     /// Dexcom's sensor intermediate (`CN=DEX01PG2`), captured from a real G7 on
     /// 2026-10-10. A genuine sensor's leaf is signed by this.
     static let dexcomSensorAnchor = Data(hexadecimalString: [

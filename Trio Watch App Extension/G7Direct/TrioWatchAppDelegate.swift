@@ -54,7 +54,10 @@ final class TrioWatchAppDelegate: NSObject, WKApplicationDelegate {
         let encrypted = userInfo["encrypted_data"] as? String
         Task { @MainActor in
             let what = encrypted == nil ? "push" : "remote command"
-            await WatchLogger.shared.log("⌚️ Push test: \(what) received\(delay), app state \(state.rawValue), \(phone)", force: true)
+            await WatchLogger.shared.log(
+                "⌚️ Push test: \(what) received\(delay), app state \(state.rawValue), \(phone)",
+                force: true
+            )
             // the wake lasts until the command is done and the sender has its answer
             if let encrypted { await WatchRemoteCommands.handle(encrypted: encrypted) }
             completionHandler(.newData)
@@ -62,7 +65,7 @@ final class TrioWatchAppDelegate: NSObject, WKApplicationDelegate {
     }
 
     func applicationDidBecomeActive() {
-        WatchG7Reader.shared.appBecameActive()   // before the recheck, so it holds in the app
+        WatchG7Reader.shared.appBecameActive() // before the recheck, so it holds in the app
         WatchG7Reader.shared.noteWake()
     }
 
@@ -204,7 +207,9 @@ final class TrioWatchAppDelegate: NSObject, WKApplicationDelegate {
             || TimeInterval(attempt) >= hold
         {
             if session.hasContentPending {
-                Task { await WatchLogger.shared.log("⌚️ Connectivity wake let go after \(attempt) s with content still pending", force: true) }
+                Task {
+                    await WatchLogger.shared
+                        .log("⌚️ Connectivity wake let go after \(attempt) s with content still pending", force: true) }
             }
             completeOnce(task)
             return
@@ -327,10 +332,20 @@ final class TrioWatchAppDelegate: NSObject, WKApplicationDelegate {
         // what only the phone's settings limit; the rest is checked with the treatment
         let state = WatchState.shared
         if let fat = payload.fat, Decimal(fat) > state.maxFat {
-            return await answer(payload, false, String(localized: "Command rejected: fat amount (\(fat)g) exceeds the maximum allowed (\(state.maxFat)g)."))
+            return await answer(
+                payload,
+                false,
+                String(localized: "Command rejected: fat amount (\(fat)g) exceeds the maximum allowed (\(state.maxFat)g).")
+            )
         }
         if let protein = payload.protein, Decimal(protein) > state.maxProtein {
-            return await answer(payload, false, String(localized: "Command rejected: protein amount (\(protein)g) exceeds the maximum allowed (\(state.maxProtein)g)."))
+            return await answer(
+                payload,
+                false,
+                String(
+                    localized: "Command rejected: protein amount (\(protein)g) exceeds the maximum allowed (\(state.maxProtein)g)."
+                )
+            )
         }
         let treatment = UntetheredRemoteTreatment(
             id: UntetheredRemoteTreatment.id(
@@ -359,8 +374,12 @@ final class TrioWatchAppDelegate: NSObject, WKApplicationDelegate {
         }
         switch result {
         case let .some(.some(outcome)):
-            await answer(payload, outcome.delivered, outcome.delivered && payload.bolusAmount != nil
-                ? String(localized: "Bolus started on the Apple Watch") : outcome.message)
+            await answer(
+                payload,
+                outcome.delivered,
+                outcome.delivered && payload.bolusAmount != nil
+                    ? String(localized: "Bolus started on the Apple Watch") : outcome.message
+            )
         case .some(.none):
             log("already handled through the iPhone")
         case .none:
@@ -549,7 +568,10 @@ enum RemoteSecretStore {
             SecItemAdd(item as CFDictionary, nil)
         }
         cached = .some(secret.isEmpty ? nil : secret)
-        Task { await WatchLogger.shared.log(secret.isEmpty ? "⌚️ Remote command: shared secret removed" : "⌚️ Remote command: shared secret stored", force: true) }
+        Task { await WatchLogger.shared.log(
+            secret.isEmpty ? "⌚️ Remote command: shared secret removed" : "⌚️ Remote command: shared secret stored",
+            force: true
+        ) }
     }
 
     private static var baseQuery: [String: Any] {

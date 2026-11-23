@@ -1,7 +1,7 @@
 import Foundation
-import OmnipodKit
 import HealthKit
 import LoopKit
+import OmnipodKit
 import SwiftUI
 import UserNotifications
 import WatchConnectivity
@@ -81,7 +81,8 @@ extension UntetheredWatchManager {
             if trigger == .newGlucose {
                 if Date().timeIntervalSince(self.data.lastLoopDate ?? .distantPast) < 11 * 60 {
                     let sensorLink = watchCGMIsConnected(self.cgmManager) ? "still open" : "closed"
-                    Task { await WatchLogger.shared.log("⌚️ Untethered: pod at once after the reading (sensor link \(sensorLink))") }
+                    Task {
+                        await WatchLogger.shared.log("⌚️ Untethered: pod at once after the reading (sensor link \(sensorLink))") }
                 } else {
                     await self.waitForSensorQuiet()
                     Self.trace("sensor link quiet, to the pod")
@@ -214,13 +215,18 @@ extension UntetheredWatchManager {
                 // refused because the phone used the pod: it has the pump now
                 if self.yieldIfPhoneTookPod() { return }
                 // the pod out of reach: loop again as soon as its link is back, not only at the next reading
-                if enacts, String(describing: error).contains("podNotConnected") || String(describing: error).contains("commsError") {
+                if enacts,
+                   String(describing: error).contains("podNotConnected") || String(describing: error).contains("commsError")
+                {
                     self.podRetryPending = (newestGlucose ?? .distantPast, Date())
                     self.podLinkFailures.append(Date())
                     if self.podLinkFailures.count > 12 { self.podLinkFailures.removeFirst(self.podLinkFailures.count - 12) }
                     // the try with Trio in front failed too: opening Trio doesn't bring the pod back
                     if trigger == .podBack, self.podFrontTry == .running {
-                        self.requestHandback(minutes: max(1, Int(Date().timeIntervalSince(self.loopReference ?? Date()) / 60)), reason: .podStall)
+                        self.requestHandback(
+                            minutes: max(1, Int(Date().timeIntervalSince(self.loopReference ?? Date()) / 60)),
+                            reason: .podStall
+                        )
                     }
                     self.checkPodLinkEarly()
                 }
@@ -265,7 +271,11 @@ extension UntetheredWatchManager {
         let outcome = await WatchNightscoutUploader.shared.upload(glucose: data.glucose, status: status, treatments: treatments)
         if outcome.statusUploaded, let deliverAt = loop?.determination.deliverAt {
             store.record(
-                UntetheredRecord(key: UntetheredRecord.nightscoutKey(deliverAt), date: Date(), kind: .nightscoutUploaded(deliverAt)),
+                UntetheredRecord(
+                    key: UntetheredRecord.nightscoutKey(deliverAt),
+                    date: Date(),
+                    kind: .nightscoutUploaded(deliverAt)
+                ),
                 epoch: data.session.epoch
             )
         }
@@ -399,7 +409,11 @@ extension UntetheredWatchManager {
                 smbDeferredAt = Date()
                 Task {
                     await WatchLogger.shared.log(
-                        String(format: "⌚️ Untethered: SMB %@ U left for the next reading, %.1f s into the wake", "\(units)", sinceLinkUp),
+                        String(
+                            format: "⌚️ Untethered: SMB %@ U left for the next reading, %.1f s into the wake",
+                            "\(units)",
+                            sinceLinkUp
+                        ),
                         force: true
                     )
                 }
@@ -504,7 +518,11 @@ extension PumpManager {
 
     func enactBolus(units: Double, automatic: Bool) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            enactBolus(decisionId: nil, units: units, activationType: automatic ? .automatic : .manualRecommendationAccepted) { error in
+            enactBolus(
+                decisionId: nil,
+                units: units,
+                activationType: automatic ? .automatic : .manualRecommendationAccepted
+            ) { error in
                 if let error { continuation.resume(throwing: error) } else { continuation.resume() }
             }
         }
@@ -700,7 +718,11 @@ extension UntetheredWatchManager {
             if let reply {
                 reply((delivered, message))
             } else {
-                send(.remoteTreatmentResult(id: treatment.id, delivered: delivered, message: message), epoch: epoch, queueing: true)
+                send(
+                    .remoteTreatmentResult(id: treatment.id, delivered: delivered, message: message),
+                    epoch: epoch,
+                    queueing: true
+                )
             }
         }
         func refuse(_ reason: String) {
@@ -721,12 +743,21 @@ extension UntetheredWatchManager {
         let isMeal = carbs > 0 || fat > 0 || protein > 0
         if isMeal {
             if carbs > grant.maxCarbs {
-                return refuse(String(localized: "Command rejected: carbs amount (\(carbs)g) exceeds the maximum allowed (\(grant.maxCarbs)g)."))
+                return refuse(
+                    String(
+                        localized: "Command rejected: carbs amount (\(carbs)g) exceeds the maximum allowed (\(grant.maxCarbs)g)."
+                    )
+                )
             }
             // as the phone: only entries already in the past can mean a replay
             let now = Date()
-            if data.carbs.contains(where: { ($0.actualDate ?? $0.createdAt) > treatment.sentAt && ($0.actualDate ?? $0.createdAt) <= now }) {
-                return refuse(String(localized: "Command rejected: newer carb entries have been logged since the command was sent."))
+            if data.carbs
+                .contains(where: { ($0.actualDate ?? $0.createdAt) > treatment.sentAt && ($0.actualDate ?? $0.createdAt) <= now
+                })
+            {
+                return refuse(
+                    String(localized: "Command rejected: newer carb entries have been logged since the command was sent.")
+                )
             }
             addCarbs(
                 NSDecimalNumber(decimal: carbs).intValue,
@@ -857,7 +888,8 @@ extension UntetheredWatchManager {
             basalProfile: grant.basalProfile,
             bolusDeliveryRate: odometer.bolusDeliveryRate
         )
-        guard case let .unrecorded(extra) = UntetheredAudit.verdict(delivered: Decimal(units - baseline.units), expected: expected)
+        guard case let .unrecorded(extra) = UntetheredAudit
+            .verdict(delivered: Decimal(units - baseline.units), expected: expected)
         else { return true }
         let rounded = extra.rounded(scale: 2)
         let bolus = PumpHistoryEvent(
@@ -879,7 +911,9 @@ extension UntetheredWatchManager {
         notify(
             id: Self.notificationPrefix + "unexplained",
             title: String(localized: "Insulin From Elsewhere"),
-            body: String(localized: "The pod delivered \(rounded) U the watch didn't give. It counts it and skips this loop's dose. Check that only the watch is dosing.")
+            body: String(
+                localized: "The pod delivered \(rounded) U the watch didn't give. It counts it and skips this loop's dose. Check that only the watch is dosing."
+            )
         )
         return false
     }
@@ -892,9 +926,14 @@ extension UntetheredWatchManager {
         do {
             try await pump.enactTempBasal(unitsPerHour: 0, for: 0)
             recordPumpStatus()
-            Task { await WatchLogger.shared.log("⌚️ Untethered: high temp \(dose.unitsPerHour) U/h cancelled after insulin from elsewhere", force: true) }
+            Task { await WatchLogger.shared.log(
+                "⌚️ Untethered: high temp \(dose.unitsPerHour) U/h cancelled after insulin from elsewhere",
+                force: true
+            ) }
         } catch {
-            Task { await WatchLogger.shared.log("⌚️ Untethered: high temp not cancelled: \(error.localizedDescription)", force: true) }
+            Task {
+                await WatchLogger.shared.log("⌚️ Untethered: high temp not cancelled: \(error.localizedDescription)", force: true)
+            }
         }
     }
 
@@ -917,7 +956,9 @@ extension UntetheredWatchManager {
             notify(
                 id: Self.handbackUnconfirmedID,
                 title: String(localized: "Hand-Back Not Confirmed"),
-                body: String(localized: "The watch offered the pump back to the iPhone, which hasn't confirmed it. Open Trio on the iPhone and keep it near the pod."),
+                body: String(
+                    localized: "The watch offered the pump back to the iPhone, which hasn't confirmed it. Open Trio on the iPhone and keep it near the pod."
+                ),
                 after: max(1, offered.addingTimeInterval(Self.handbackUnconfirmedAfter).timeIntervalSinceNow),
                 asksForAction: true
             )
@@ -942,7 +983,9 @@ extension UntetheredWatchManager {
         notify(
             id: Self.phoneSilentID,
             title: String(localized: "No Word From iPhone"),
-            body: String(localized: "Trio on the iPhone hasn't reached the watch for 25 minutes, and the watch hasn't taken over. Check that Trio on the iPhone is running and looping."),
+            body: String(
+                localized: "Trio on the iPhone hasn't reached the watch for 25 minutes, and the watch hasn't taken over. Check that Trio on the iPhone is running and looping."
+            ),
             after: Self.phoneSilentAfter,
             asksForAction: true
         )
@@ -951,7 +994,9 @@ extension UntetheredWatchManager {
     /// `BolusSafetyEvaluator`'s rules (phone only) with the watch's numbers.
     private func remoteBolusRejection(_ units: Decimal, since sentAt: Date, grant: UntetheredGrant) -> String? {
         if units > grant.maxBolus {
-            return String(localized: "Command rejected: bolus amount (\(units) units) exceeds the maximum allowed (\(grant.maxBolus) units).")
+            return String(
+                localized: "Command rejected: bolus amount (\(units) units) exceeds the maximum allowed (\(grant.maxBolus) units)."
+            )
         }
         // the last loop's IOB, while it is recent, with the boluses since it: the loop's own SMB and anything after
         // it, which its IOB (calculated before them) doesn't hold
@@ -964,13 +1009,17 @@ extension UntetheredWatchManager {
         let iob = loopIOB + sinceLoop
         let maxIOB = grant.preferences.clamped(for: grant.dosingMode).maxIOB
         if iob + units > maxIOB {
-            return String(localized: "Command rejected: bolus amount (\(units) units) would exceed max IOB (\(maxIOB) units). Current IOB: \(iob) units.")
+            return String(
+                localized: "Command rejected: bolus amount (\(units) units) would exceed max IOB (\(maxIOB) units). Current IOB: \(iob) units."
+            )
         }
         let recent = data.pumpHistory
             .filter { [.bolus, .smb].contains($0.type) && $0.timestamp > sentAt }
             .reduce(Decimal(0)) { $0 + ($1.amount ?? 0) }
         if recent >= units * Self.remoteRecentBolusThreshold {
-            return String(localized: "Command rejected: boluses totaling more than 20% of the requested amount have been delivered since the command was sent.")
+            return String(
+                localized: "Command rejected: boluses totaling more than 20% of the requested amount have been delivered since the command was sent."
+            )
         }
         return nil
     }
@@ -1320,7 +1369,9 @@ extension UntetheredWatchManager: PumpManagerDelegate {
 
     func pumpManager(_ manager: PumpManager, didError error: PumpManagerError) {
         guard isSessionPump(manager as AnyObject) else {
-            Task { await WatchLogger.shared.log("⌚️ Untethered: fallback — the look's pump: \(error.localizedDescription)", force: true) }
+            Task {
+                await WatchLogger.shared
+                    .log("⌚️ Untethered: fallback — the look's pump: \(error.localizedDescription)", force: true) }
             return
         }
         setError(error.localizedDescription)
@@ -1493,7 +1544,10 @@ extension UntetheredWatchManager: PumpManagerDelegate {
                 if removed || self.sensorEncryptTimeouts >= 2 {
                     self.setError(Self.sensorRefusalMessage)
                 } else {
-                    Task { await WatchLogger.shared.log("⌚️ Untethered: the sensor's link timed out while encrypting; a refusal only if the next connect fails the same way", force: true) }
+                    Task { await WatchLogger.shared.log(
+                        "⌚️ Untethered: the sensor's link timed out while encrypting; a refusal only if the next connect fails the same way",
+                        force: true
+                    ) }
                 }
             }
         }
@@ -1509,7 +1563,9 @@ extension UntetheredWatchManager: PumpManagerDelegate {
 
     func deviceManagerControlDidBecomeReady(_ manager: DeviceManager) {
         let look = manager is PumpManager && !isSessionPump(manager as AnyObject)
-        Task { await WatchLogger.shared.log(look ? "⌚️ Untethered: fallback — the look's pump link ready" : "⌚️ Untethered: pump link ready") }
+        Task {
+            await WatchLogger.shared
+                .log(look ? "⌚️ Untethered: fallback — the look's pump link ready" : "⌚️ Untethered: pump link ready") }
     }
 
     // MARK: Alerts
@@ -2050,7 +2106,9 @@ extension UntetheredWatchManager: CGMManagerDelegate {
                       case let .handbackRequested(minutes) = envelope.message, minutes > 0
                 else { continue }
                 transfer.cancel()
-                Task { await WatchLogger.shared.log("⌚️ Untethered: the pod is back, the queued hand-back request is withdrawn", force: true) }
+                Task {
+                    await WatchLogger.shared
+                        .log("⌚️ Untethered: the pod is back, the queued hand-back request is withdrawn", force: true) }
             }
         }
     }
@@ -2081,7 +2139,9 @@ extension UntetheredWatchManager: CGMManagerDelegate {
             asksForAction: true
         )
         WKInterfaceDevice.current().play(.failure)
-        Task { await WatchLogger.shared.log("⌚️ Untethered: early notice — open Trio on the watch (no loop for \(minutes) min)", force: true) }
+        Task {
+            await WatchLogger.shared
+                .log("⌚️ Untethered: early notice — open Trio on the watch (no loop for \(minutes) min)", force: true) }
         // already in front: try now rather than at the next reading
         if WKApplication.shared().applicationState == .active { retryPodInFront() }
     }
@@ -2205,8 +2265,10 @@ extension UntetheredWatchManager: CGMManagerDelegate {
     func retryPodInFront() {
         guard podLinkEarlyNoticeAt != nil, data.session.phase == .active, !isBolusing,
               (podQuietUntil ?? .distantPast) <= Date()
-        else { podFrontTry = nil; return }
-        guard !isLooping else { podFrontTry = .pending; return }
+        else { podFrontTry = nil
+            return }
+        guard !isLooping else { podFrontTry = .pending
+            return }
         Task { await WatchLogger.shared.log("⌚️ Untethered: Trio in front after the early notice, trying the pod", force: true) }
         podFrontTry = .running
         runLoop(.podBack)
@@ -2225,7 +2287,10 @@ extension UntetheredWatchManager: CGMManagerDelegate {
     func cgmManager(_: CGMManager, hasNew readingResult: CGMReadingResult) {
         // outside a session the link only stays warm; the phone reads the same sensor
         guard isActive, case let .newData(samples) = readingResult, !samples.isEmpty else { return }
-        Self.trace("reading in: \(samples.count) sample(s), newest from \(samples.map(\.date).max()?.formatted(date: .omitted, time: .standard) ?? "-")")
+        Self
+            .trace(
+                "reading in: \(samples.count) sample(s), newest from \(samples.map(\.date).max()?.formatted(date: .omitted, time: .standard) ?? "-")"
+            )
         sensorPairingDone()
         if let newest = samples.filter({ !$0.wasUserEntered }).map(\.date).max() {
             DispatchQueue.main.async {
@@ -2494,7 +2559,9 @@ extension UntetheredWatchManager {
                 alarm(
                     "sensor",
                     title: String(localized: "Sensor Warming Up"),
-                    body: String(localized: "The sensor is warming up and sends no glucose yet (no reading for \(minutes) minutes)."),
+                    body: String(
+                        localized: "The sensor is warming up and sends no glucose yet (no reading for \(minutes) minutes)."
+                    ),
                     every: 30 * 60
                 )
             case nil:
@@ -2678,7 +2745,10 @@ extension UntetheredWatchManager {
                 return
             }
             Task {
-                await WatchLogger.shared.log("⌚️ Untethered: notification \(id) failed: \(error.localizedDescription)", force: true)
+                await WatchLogger.shared.log(
+                    "⌚️ Untethered: notification \(id) failed: \(error.localizedDescription)",
+                    force: true
+                )
             }
         }
         if asksForAction, delay == nil { ActionNotice.ask(id: id, content: content) }
@@ -3014,7 +3084,8 @@ final class UntetheredWorkoutKeepAlive: NSObject, HKWorkoutSessionDelegate, HKLi
 
     func workoutBuilder(_ workoutBuilder: HKLiveWorkoutBuilder, didCollectDataOf collectedTypes: Set<HKSampleType>) {
         guard collectedTypes.contains(Self.heartRate),
-              let bpm = workoutBuilder.statistics(for: Self.heartRate)?.mostRecentQuantity()?.doubleValue(for: Self.beatsPerMinute)
+              let bpm = workoutBuilder.statistics(for: Self.heartRate)?.mostRecentQuantity()?
+              .doubleValue(for: Self.beatsPerMinute)
         else { return }
         DispatchQueue.main.async { self.onHeartRate(bpm) }
     }

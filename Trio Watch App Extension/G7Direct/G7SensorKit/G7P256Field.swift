@@ -1,10 +1,3 @@
-//
-//  G7P256Field.swift
-//  G7SensorKit
-//
-//  Copyright © 2026 LoopKit Authors. All rights reserved.
-//
-
 import Foundation
 
 /// A P-256 field element in Montgomery form, four 64-bit limbs, least significant first. Fixed width
@@ -72,8 +65,7 @@ struct G7P256Field: Equatable {
 
     // MARK: - Limb helpers
 
-    @inline(__always)
-    private static func mac(_ a: UInt64, _ b: UInt64, _ c: UInt64, _ carry: inout UInt64) -> UInt64 {
+    @inline(__always) private static func mac(_ a: UInt64, _ b: UInt64, _ c: UInt64, _ carry: inout UInt64) -> UInt64 {
         let (high, low) = a.multipliedFullWidth(by: b)
         let (sum1, overflow1) = low.addingReportingOverflow(c)
         let (sum2, overflow2) = sum1.addingReportingOverflow(carry)
@@ -81,14 +73,12 @@ struct G7P256Field: Equatable {
         return sum2
     }
 
-    @inline(__always)
-    private static func addCarry(_ a: UInt64, _ b: UInt64) -> (UInt64, UInt64) {
+    @inline(__always) private static func addCarry(_ a: UInt64, _ b: UInt64) -> (UInt64, UInt64) {
         let (sum, overflow) = a.addingReportingOverflow(b)
         return (sum, overflow ? 1 : 0)
     }
 
-    @inline(__always)
-    private static func subBorrow(_ a: UInt64, _ b: UInt64, _ borrow: inout UInt64) -> UInt64 {
+    @inline(__always) private static func subBorrow(_ a: UInt64, _ b: UInt64, _ borrow: inout UInt64) -> UInt64 {
         let (d1, o1) = a.subtractingReportingOverflow(b)
         let (d2, o2) = d1.subtractingReportingOverflow(borrow)
         borrow = (o1 || o2) ? 1 : 0
@@ -96,8 +86,7 @@ struct G7P256Field: Equatable {
     }
 
     /// Subtracts p once when the value, with an extra carry bit, is at least p.
-    @inline(__always)
-    fileprivate func subtractingModulusIfNeeded(carry: UInt64) -> G7P256Field {
+    @inline(__always) fileprivate func subtractingModulusIfNeeded(carry: UInt64) -> G7P256Field {
         var borrow: UInt64 = 0
         let r0 = G7P256Field.subBorrow(l0, G7P256Field.P0, &borrow)
         let r1 = G7P256Field.subBorrow(l1, G7P256Field.P1, &borrow)
@@ -162,8 +151,7 @@ struct G7P256Field: Equatable {
         return result
     }
 
-    @inline(__always)
-    static func mul(_ a: G7P256Field, _ b: G7P256Field) -> G7P256Field {
+    @inline(__always) static func mul(_ a: G7P256Field, _ b: G7P256Field) -> G7P256Field {
         var t0: UInt64 = 0, t1: UInt64 = 0, t2: UInt64 = 0, t3: UInt64 = 0, t4: UInt64 = 0, t5: UInt64 = 0
         var c: UInt64 = 0
         var m: UInt64 = 0

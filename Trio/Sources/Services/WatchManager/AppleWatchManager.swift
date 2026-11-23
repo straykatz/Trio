@@ -26,7 +26,8 @@ enum WatchAppPresence {
         defer { lock.unlock() }
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: key)
         // the watch spoke: a "No Word From the Watch" booked ahead for this silence isn't said
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [UntetheredPhoneManager.watchSilentID])
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: [UntetheredPhoneManager.watchSilentID])
     }
 
     static var lastHeard: Date? {
@@ -883,7 +884,8 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
         message[WatchMessageKeys.watchGlanceEnabled] = settingsManager.settings.watchGlanceEnabled
         message[WatchMessageKeys.useCriticalAlertsWatch] = settingsManager.settings.useCriticalAlerts
         // the countdown on the watch's first page; 0 clears it there
-        message[WatchMessageKeys.mealTimeReminderAt] = mealTimeReminderService.pendingReminder?.fireDate.timeIntervalSince1970 ?? 0
+        message[WatchMessageKeys.mealTimeReminderAt] = mealTimeReminderService.pendingReminder?.fireDate
+            .timeIntervalSince1970 ?? 0
         message[WatchMessageKeys.phoneAppVersion] = UntetheredVersion.current
         // carbs and boluses as markers on the watch chart: times only, the values would crowd a watch screen
         let treatments = await chartTreatments()
@@ -924,7 +926,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
         Task { @MainActor [untethered] in untethered?.reachabilityChanged() }
 
         // Try to send initial data after activation
-        self.pushWatchState()
+        pushWatchState()
     }
 
     /// Untethered mode's interactive messages from the watch; every path must call `replyHandler`,
@@ -1219,7 +1221,11 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
     /// the log (18 November: 45 minutes of nothing reaching the watch, and nothing on the phone said so).
     func session(_: WCSession, didFinish userInfoTransfer: WCSessionUserInfoTransfer, error: Error?) {
         guard let error else { return }
-        warning(.watch, "Watch transfer not delivered (\(userInfoTransfer.userInfo.keys.sorted().joined(separator: ", ")))", error: error)
+        warning(
+            .watch,
+            "Watch transfer not delivered (\(userInfoTransfer.userInfo.keys.sorted().joined(separator: ", ")))",
+            error: error
+        )
     }
 
     #if os(iOS)
@@ -1231,7 +1237,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
                 "Watch changed: paired \(session.isPaired), app installed \(session.isWatchAppInstalled), Trio on the face \(session.isComplicationEnabled)"
             )
             Task { @MainActor [untethered] in untethered?.reachabilityChanged() }
-            self.pushWatchState()
+            pushWatchState()
         }
     #endif
 
@@ -1250,7 +1256,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
 
         if session.isReachable {
             // Try to send data when connection is established
-            self.pushWatchState()
+            pushWatchState()
         } else {
             // Try to reconnect after a short delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
@@ -1571,8 +1577,9 @@ extension BaseWatchManager: SettingsObserver, PumpSettingsObserver {
 
 extension BaseWatchManager: SnoozeObserver {
     @MainActor func snoozeDidChange(_: Date) {
-        guard let session = self.session, session.isPaired, session.isReachable, WatchAppPresence.isInstalled(session) else { return }
-        self.pushWatchState()
+        guard let session = self.session, session.isPaired, session.isReachable,
+              WatchAppPresence.isInstalled(session) else { return }
+        pushWatchState()
     }
 }
 

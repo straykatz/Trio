@@ -304,7 +304,9 @@ final class WatchG7Session: G7BluetoothManagerDelegate {
         request.append(start.littleEndian)
         request.append(end.littleEndian)
         do {
-            report("Asking the sensor for the readings since \(DateFormatter.localizedString(from: latestReadingDate, dateStyle: .none, timeStyle: .short))")
+            report(
+                "Asking the sensor for the readings since \(DateFormatter.localizedString(from: latestReadingDate, dateStyle: .none, timeStyle: .short))"
+            )
             try peripheral.writeValue(request, for: .control, type: .withResponse)
         } catch {
             report("Backfill request failed: \(error)")

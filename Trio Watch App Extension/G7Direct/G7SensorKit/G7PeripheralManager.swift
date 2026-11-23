@@ -1,15 +1,6 @@
-//
-//  G7PeripheralManager.swift
-//  CGMBLEKit
-//
-//  Created by Pete Schwamb on 11/11/22.
-//  Copyright © 2022 LoopKit Authors. All rights reserved.
-//
-
 import CoreBluetooth
 import Foundation
 import os.log
-
 
 enum PeripheralManagerError: Error {
     case cbPeripheralError(Error)
@@ -20,7 +11,6 @@ enum PeripheralManagerError: Error {
 }
 
 class G7PeripheralManager: NSObject {
-
     private let log = OSLog(category: "G7PeripheralManager")
 
     ///
@@ -88,7 +78,7 @@ class G7PeripheralManager: NSObject {
 
     init(peripheral: CBPeripheral, configuration: Configuration, centralManager: CBCentralManager) {
         self.peripheral = peripheral
-        self.central = centralManager
+        central = centralManager
         self.configuration = configuration
 
         super.init()
@@ -108,9 +98,9 @@ class G7PeripheralManager: NSObject {
     }
 
     func requestExtendedVersion() throws {
-        self.log.default("Requesting sensor extended version");
+        log.default("Requesting sensor extended version")
         guard let service = peripheral.services?.itemWithUUID(SensorServiceUUID.cgmService.cbUUID) else {
-            self.log.error("Peripheral missing cgm service. Services = %{public}@", String(describing: peripheral.services));
+            log.error("Peripheral missing cgm service. Services = %{public}@", String(describing: peripheral.services))
             throw PeripheralManagerError.invalidConfiguration
         }
 
@@ -122,8 +112,8 @@ class G7PeripheralManager: NSObject {
     }
 }
 
-
 // MARK: - Nested types
+
 extension G7PeripheralManager {
     struct Configuration {
         var serviceCharacteristics: [CBUUID: [CBUUID]] = [:]
@@ -150,8 +140,8 @@ protocol G7PeripheralManagerDelegate: AnyObject {
     func completeConfiguration(for manager: G7PeripheralManager) throws
 }
 
-
 // MARK: - Operation sequence management
+
 extension G7PeripheralManager {
     func configureAndRun(_ block: @escaping (_ manager: G7PeripheralManager) -> Void) -> (() -> Void) {
         return {
@@ -170,11 +160,10 @@ extension G7PeripheralManager {
                     } else {
                         self.log.error("No delegate set configured")
                     }
-                } catch let error {
+                } catch {
                     self.log.error("Error applying peripheral configuration: %{public}@", String(describing: error))
                     // Will retry
                 }
-
             }
 
             block(self)
@@ -187,7 +176,7 @@ extension G7PeripheralManager {
 
     private func assertConfiguration() {
         log.debug("assertConfiguration")
-        perform { (_) in
+        perform { _ in
             // Intentionally empty to trigger configuration if necessary
         }
     }
@@ -208,13 +197,24 @@ extension G7PeripheralManager {
             guard let service = peripheral.services?.itemWithUUID(serviceUUID) else {
                 // Log what discovery returned: an empty or partial inventory means the link dropped
                 // mid-discovery, a full but different one means unexpected GATT.
-                log.error("unknownCharacteristic: service %{public}@ MISSING on %{public}@ — discovered: %{public}@", String(serviceUUID.uuidString.prefix(8)), peripheral.name ?? "unnamed", Self.gattInventory(peripheral))
+                log.error(
+                    "unknownCharacteristic: service %{public}@ MISSING on %{public}@ — discovered: %{public}@",
+                    String(serviceUUID.uuidString.prefix(8)),
+                    peripheral.name ?? "unnamed",
+                    Self.gattInventory(peripheral)
+                )
                 throw PeripheralManagerError.unknownCharacteristic
             }
 
             for characteristicUUID in characteristicUUIDs {
                 guard let characteristic = service.characteristics?.itemWithUUID(characteristicUUID) else {
-                    log.error("unknownCharacteristic: char %{public}@ MISSING in service %{public}@ on %{public}@ — discovered: %{public}@", String(characteristicUUID.uuidString.prefix(8)), String(serviceUUID.uuidString.prefix(8)), peripheral.name ?? "unnamed", Self.gattInventory(peripheral))
+                    log.error(
+                        "unknownCharacteristic: char %{public}@ MISSING in service %{public}@ on %{public}@ — discovered: %{public}@",
+                        String(characteristicUUID.uuidString.prefix(8)),
+                        String(serviceUUID.uuidString.prefix(8)),
+                        peripheral.name ?? "unnamed",
+                        Self.gattInventory(peripheral)
+                    )
                     throw PeripheralManagerError.unknownCharacteristic
                 }
 
@@ -233,7 +233,8 @@ extension G7PeripheralManager {
         guard let services = peripheral.services else { return "NO SERVICES (discovery incomplete)" }
         if services.isEmpty { return "0 services" }
         return services.map { svc in
-            let chars = svc.characteristics?.map { String($0.uuid.uuidString.prefix(8)) }.joined(separator: ",") ?? "none-discovered"
+            let chars = svc.characteristics?.map { String($0.uuid.uuidString.prefix(8)) }
+                .joined(separator: ",") ?? "none-discovered"
             return "\(svc.uuid.uuidString.prefix(8)):[\(chars)]"
         }.joined(separator: " | ")
     }
@@ -277,15 +278,19 @@ extension CBPeripheralState {
     }
 }
 
-
 // MARK: - Synchronous Commands
+
 extension G7PeripheralManager {
     /// - Throws: PeripheralManagerError
     func runCommand(timeout: TimeInterval, command: () -> Void) throws {
         // Prelude
         dispatchPrecondition(condition: .onQueue(queue))
-        guard central?.state == .poweredOn && peripheral.state == .connected else {
-            log.debug("Unable to run command: central state = %{public}@, peripheral state = %{public}@", String(describing: central?.state.description), String(describing: peripheral.state))
+        guard central?.state == .poweredOn, peripheral.state == .connected else {
+            log.debug(
+                "Unable to run command: central state = %{public}@, peripheral state = %{public}@",
+                String(describing: central?.state.description),
+                String(describing: peripheral.state)
+            )
             throw PeripheralManagerError.notReady
         }
 
@@ -337,7 +342,7 @@ extension G7PeripheralManager {
 
         log.debug("Discovering servicesToDiscover %@", String(describing: servicesToDiscover))
 
-        guard servicesToDiscover.count > 0 else {
+        guard !servicesToDiscover.isEmpty else {
             return
         }
 
@@ -351,24 +356,27 @@ extension G7PeripheralManager {
     }
 
     func discoverCharacteristics(_ characteristicUUIDs: [CBUUID], for service: CBService, timeout: TimeInterval) throws {
-
         log.debug("all uuids: %@", String(describing: characteristicUUIDs))
 
-        let knownCharacteristicUUIDs = service.characteristics?.compactMap({ $0.uuid }) ?? []
+        let knownCharacteristicUUIDs = service.characteristics?.compactMap(\.uuid) ?? []
         log.debug("knownCharacteristicUUIDs: %@", String(describing: knownCharacteristicUUIDs))
 
         let characteristicsToDiscover = peripheral.characteristicsToDiscover(from: characteristicUUIDs, for: service)
 
         log.debug("characteristicsToDiscover: %@", String(describing: characteristicsToDiscover))
 
-        guard characteristicsToDiscover.count > 0 else {
+        guard !characteristicsToDiscover.isEmpty else {
             return
         }
 
         try runCommand(timeout: timeout) {
             addCondition(.discoverCharacteristicsForService(serviceUUID: service.uuid))
 
-            log.debug("Discovering characteristics %@ for %@", String(describing: characteristicsToDiscover), String(describing: peripheral))
+            log.debug(
+                "Discovering characteristics %@ for %@",
+                String(describing: characteristicsToDiscover),
+                String(describing: peripheral)
+            )
             peripheral.discoverCharacteristics(characteristicsToDiscover, for: service)
         }
     }
@@ -407,7 +415,12 @@ extension G7PeripheralManager {
     }
 
     /// - Throws: PeripheralManagerError
-    func writeValue(_ value: Data, for characteristic: CBCharacteristic, type: CBCharacteristicWriteType, timeout: TimeInterval) throws {
+    func writeValue(
+        _ value: Data,
+        for characteristic: CBCharacteristic,
+        type: CBCharacteristicWriteType,
+        timeout: TimeInterval
+    ) throws {
         try runCommand(timeout: timeout) {
             if case .withResponse = type {
                 addCondition(.write(characteristic: characteristic))
@@ -418,11 +431,10 @@ extension G7PeripheralManager {
     }
 }
 
-
 // MARK: - Delegate methods executed on the central's queue
-extension G7PeripheralManager: CBPeripheralDelegate {
 
-    func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+extension G7PeripheralManager: CBPeripheralDelegate {
+    func peripheral(_: CBPeripheral, didDiscoverServices error: Error?) {
         commandLock.lock()
 
         if let index = commandConditions.firstIndex(where: { (condition) -> Bool in
@@ -443,7 +455,7 @@ extension G7PeripheralManager: CBPeripheralDelegate {
         commandLock.unlock()
     }
 
-    func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+    func peripheral(_: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         commandLock.lock()
 
         if let index = commandConditions.firstIndex(where: { (condition) -> Bool in
@@ -472,20 +484,33 @@ extension G7PeripheralManager: CBPeripheralDelegate {
         var tag = ""
         if ns.domain == CBErrorDomain {
             switch ns.code {
-            case 18: tag = " — NEAR the watchOS background-notification limit (CBError 18); the next background wake may be the last before the reset"
-            case 17: tag = " — EXCEEDED the watchOS background-notification limit (CBError 17); no background BLE runtime until the user interacts with the app or 24 h pass"
+            case 18: tag =
+                " — NEAR the watchOS background-notification limit (CBError 18); the next background wake may be the last before the reset"
+            case 17: tag =
+                " — EXCEEDED the watchOS background-notification limit (CBError 17); no background BLE runtime until the user interacts with the app or 24 h pass"
             default: break
             }
         }
-        log.error("[gatt] %{public}@ error on %{public}@ — %{public}@ (%{public}@#%d)%{public}@", what, characteristic.uuid.uuidString, error.localizedDescription, ns.domain, ns.code, tag)
+        log.error(
+            "[gatt] %{public}@ error on %{public}@ — %{public}@ (%{public}@#%d)%{public}@",
+            what,
+            characteristic.uuid.uuidString,
+            error.localizedDescription,
+            ns.domain,
+            ns.code,
+            tag
+        )
         // Trio: the one change to this copied file, so these reach the app's own log.
-        G7PeripheralManager.gattErrorHook?("[gatt] \(what) error on \(characteristic.uuid.uuidString) — \(error.localizedDescription) (\(ns.domain)#\(ns.code))\(tag)")
+        G7PeripheralManager
+            .gattErrorHook?(
+                "[gatt] \(what) error on \(characteristic.uuid.uuidString) — \(error.localizedDescription) (\(ns.domain)#\(ns.code))\(tag)"
+            )
     }
 
     /// Trio: receives each GATT error line above, for the watch's log.
     static var gattErrorHook: ((String) -> Void)?
 
-    func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+    func peripheral(_: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
         reportGattError(error, during: "notification-state update", on: characteristic)
         commandLock.lock()
 
@@ -509,7 +534,7 @@ extension G7PeripheralManager: CBPeripheralDelegate {
         commandLock.unlock()
     }
 
-    func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+    func peripheral(_: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
         commandLock.lock()
 
         if let index = commandConditions.firstIndex(where: { (condition) -> Bool in
@@ -530,7 +555,7 @@ extension G7PeripheralManager: CBPeripheralDelegate {
         commandLock.unlock()
     }
 
-    func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+    func peripheral(_: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         reportGattError(error, during: "value update", on: characteristic)
         commandLock.lock()
 
@@ -579,15 +604,14 @@ extension G7PeripheralManager: CBPeripheralDelegate {
         }
     }
 
-    func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
+    func peripheral(_: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
         delegate?.peripheralManager(self, didReadRSSI: RSSI, error: error)
     }
 
-    func peripheralDidUpdateName(_ peripheral: CBPeripheral) {
+    func peripheralDidUpdateName(_: CBPeripheral) {
         delegate?.peripheralManagerDidUpdateName(self)
     }
 }
-
 
 extension G7PeripheralManager: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
@@ -600,7 +624,7 @@ extension G7PeripheralManager: CBCentralManagerDelegate {
         }
     }
 
-    func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+    func centralManager(_: CBCentralManager, didConnect peripheral: CBPeripheral) {
         log.debug("didConnect to %{public}@", peripheral.identifier.uuidString)
         switch peripheral.state {
         case .connected:
@@ -611,12 +635,11 @@ extension G7PeripheralManager: CBCentralManagerDelegate {
     }
 }
 
-
 extension G7PeripheralManager {
-    public override var debugDescription: String {
+    override public var debugDescription: String {
         var items = [
             "## G7PeripheralManager",
-            "peripheral: \(peripheral)",
+            "peripheral: \(peripheral)"
         ]
         queue.sync {
             items.append("needsConfiguration: \(needsConfiguration)")
@@ -627,12 +650,14 @@ extension G7PeripheralManager {
 
 extension G7PeripheralManager {
     private func getCharacteristicWithUUID(_ uuid: CGMServiceCharacteristicUUID) -> CBCharacteristic? {
-        return peripheral.getCharacteristicWithUUID(uuid)
+        peripheral.getCharacteristicWithUUID(uuid)
     }
 
-    func setNotifyValue(_ enabled: Bool,
+    func setNotifyValue(
+        _ enabled: Bool,
         for characteristicUUID: CGMServiceCharacteristicUUID,
-        timeout: TimeInterval = 2) throws
+        timeout: TimeInterval = 2
+    ) throws
     {
         guard let characteristic = getCharacteristicWithUUID(characteristicUUID) else {
             throw PeripheralManagerError.unknownCharacteristic
@@ -640,16 +665,17 @@ extension G7PeripheralManager {
 
         try setNotifyValue(enabled, for: characteristic, timeout: timeout)
     }
-
 }
 
-
-fileprivate extension CBPeripheral {
+private extension CBPeripheral {
     func getServiceWithUUID(_ uuid: SensorServiceUUID) -> CBService? {
-        return services?.itemWithUUIDString(uuid.rawValue)
+        services?.itemWithUUIDString(uuid.rawValue)
     }
 
-    func getCharacteristicForServiceUUID(_ serviceUUID: SensorServiceUUID, withUUIDString UUIDString: String) -> CBCharacteristic? {
+    func getCharacteristicForServiceUUID(
+        _ serviceUUID: SensorServiceUUID,
+        withUUIDString UUIDString: String
+    ) -> CBCharacteristic? {
         guard let characteristics = getServiceWithUUID(serviceUUID)?.characteristics else {
             return nil
         }
@@ -658,6 +684,6 @@ fileprivate extension CBPeripheral {
     }
 
     func getCharacteristicWithUUID(_ uuid: CGMServiceCharacteristicUUID) -> CBCharacteristic? {
-        return getCharacteristicForServiceUUID(.cgmService, withUUIDString: uuid.rawValue)
+        getCharacteristicForServiceUUID(.cgmService, withUUIDString: uuid.rawValue)
     }
 }

@@ -210,40 +210,45 @@ struct UntetheredBannerSlot<Content: View, Banner: View>: View {
         if manager.isWatchInCharge || manager.state.pumpReturnPending {
             // by the second while the start reaches the watch, so its progress counts up
             TimelineView(.periodic(from: .now, by: manager.isReachingWatch ? 1 : 30)) { context in
-            let silentMinutes = manager.watchSilentMinutes(now: context.date)
-            banner(
-                manager.isBluetoothOff
-                    ? String(localized: "⚠️ iPhone Bluetooth Off")
-                    : manager.state.pumpReturnPending
-                    ? manager.pumpReturnTitle
-                    : manager.isReachingWatch ? String(localized: "Starting Watch Mode…")
-                    : manager.isHandingBack ? String(localized: "Asking the watch for the pump…")
-                    : manager.state.session.isCheckingForeignSession ? String(localized: "Safety Check with the Watch")
-                    : silentMinutes != nil ? String(localized: "⚠️ No Word From the Watch")
-                    : String(localized: "Watch mode on Apple Watch"),
-                manager.isBluetoothOff
-                    ? (manager.state.pumpReturnPending
-                        ? String(localized: "The phone can't reach the pump and nothing doses. Turn Bluetooth on.")
-                        : String(localized: "The watch doses. Turn Bluetooth on before the pump comes back to the phone."))
-                    : manager.state.pumpReturnPending
-                    ? manager.state.lastError
-                    ?? String(localized: "Checking what the watch delivered before the phone doses again.")
-                    : manager.isReachingWatch
-                    ? manager.startProgressText(now: context.date)
-                    : manager.isHandingBack
-                    ? manager.handingBackText
-                    : manager.state.session.isCheckingForeignSession
-                    // not untethered mode, though it shows in its place (6 November, 07:36: "what was that?")
-                    ? String(localized: "The watch was just at the pod. The phone waits for the watch's answer before dosing again, usually a few seconds. Watch mode is not on.")
-                    : silentMinutes.map {
-                        String(
-                            localized: "Nothing from the watch for \($0) min, though both are near the sensor. Open Trio on the watch and check that it loops, or tap here to take the pump back."
+                let silentMinutes = manager.watchSilentMinutes(now: context.date)
+                banner(
+                    manager.isBluetoothOff
+                        ? String(localized: "⚠️ iPhone Bluetooth Off")
+                        : manager.state.pumpReturnPending
+                        ? manager.pumpReturnTitle
+                        : manager.isReachingWatch ? String(localized: "Starting Watch Mode…")
+                        : manager.isHandingBack ? String(localized: "Asking the watch for the pump…")
+                        : manager.state.session.isCheckingForeignSession ? String(localized: "Safety Check with the Watch")
+                        : silentMinutes != nil ? String(localized: "⚠️ No Word From the Watch")
+                        : String(localized: "Watch mode on Apple Watch"),
+                    manager.isBluetoothOff
+                        ? (
+                            manager.state.pumpReturnPending
+                                ? String(localized: "The phone can't reach the pump and nothing doses. Turn Bluetooth on.")
+                                : String(localized: "The watch doses. Turn Bluetooth on before the pump comes back to the phone.")
                         )
-                    }
-                    ?? String(localized: "The phone doesn't dose. Bolus and carbs are entered on the watch."),
-                manager.isWatchInCharge && !manager.isReachingWatch,
-                { showActions = manager.isWatchInCharge && !manager.isReachingWatch }
-            )
+                        : manager.state.pumpReturnPending
+                        ? manager.state.lastError
+                        ?? String(localized: "Checking what the watch delivered before the phone doses again.")
+                        : manager.isReachingWatch
+                        ? manager.startProgressText(now: context.date)
+                        : manager.isHandingBack
+                        ? manager.handingBackText
+                        : manager.state.session.isCheckingForeignSession
+                        // not untethered mode, though it shows in its place (6 November, 07:36: "what was that?")
+                        ?
+                        String(
+                            localized: "The watch was just at the pod. The phone waits for the watch's answer before dosing again, usually a few seconds. Watch mode is not on."
+                        )
+                        : silentMinutes.map {
+                            String(
+                                localized: "Nothing from the watch for \($0) min, though both are near the sensor. Open Trio on the watch and check that it loops, or tap here to take the pump back."
+                            )
+                        }
+                        ?? String(localized: "The phone doesn't dose. Bolus and carbs are entered on the watch."),
+                    manager.isWatchInCharge && !manager.isReachingWatch,
+                    { showActions = manager.isWatchInCharge && !manager.isReachingWatch }
+                )
             }
             .confirmationDialog("Watch Mode", isPresented: $showActions, titleVisibility: .visible) {
                 Button("End Watch Mode") { Task { await manager.end() } }

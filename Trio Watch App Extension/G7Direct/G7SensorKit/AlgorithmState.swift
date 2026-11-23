@@ -1,13 +1,4 @@
-//
-//  CalibrationState.swift
-//  xDripG5
-//
-//  Created by Nate Racklyeft on 8/6/16.
-//  Copyright © 2016 Nathan Racklyeft. All rights reserved.
-//
-
 import Foundation
-
 
 public enum AlgorithmState: RawRepresentable {
     public typealias RawValue = UInt8
@@ -58,20 +49,31 @@ public enum AlgorithmState: RawRepresentable {
 
     public var rawValue: RawValue {
         switch self {
-        case .known(let state):
+        case let .known(state):
             return state.rawValue
-        case .unknown(let rawValue):
+        case let .unknown(rawValue):
             return rawValue
         }
     }
 
     public var sensorFailed: Bool {
-        guard case .known(let state) = self else {
+        guard case let .known(state) = self else {
             return false
         }
 
         switch state {
-        case .sensorFailed, .sensorFailedDuetoCountsAberration, .sensorFailedDuetoResidualAberration, .sessionFailedDueToTransmitterError, .sessionFailedDueToUnrecoverableError, .sensorFailedDueToProgressiveSensorDecline, .sensorFailedDueToHighCountsAberration, .sensorFailedDueToLowCountsAberration, .sensorFailedDueToRestart, .transmitterFailed, .sivFailed, .sessionFailedOutOfRange:
+        case .sensorFailed,
+             .sensorFailedDuetoCountsAberration,
+             .sensorFailedDueToHighCountsAberration,
+             .sensorFailedDueToLowCountsAberration,
+             .sensorFailedDueToProgressiveSensorDecline,
+             .sensorFailedDuetoResidualAberration,
+             .sensorFailedDueToRestart,
+             .sessionFailedDueToTransmitterError,
+             .sessionFailedDueToUnrecoverableError,
+             .sessionFailedOutOfRange,
+             .sivFailed,
+             .transmitterFailed:
             return true
         default:
             return false
@@ -79,7 +81,7 @@ public enum AlgorithmState: RawRepresentable {
     }
 
     public var isInWarmup: Bool {
-        guard case .known(let state) = self else {
+        guard case let .known(state) = self else {
             return false
         }
 
@@ -92,7 +94,7 @@ public enum AlgorithmState: RawRepresentable {
     }
 
     public var hasTemporaryError: Bool {
-        guard case .known(let state) = self else {
+        guard case let .known(state) = self else {
             return false
         }
 
@@ -104,9 +106,8 @@ public enum AlgorithmState: RawRepresentable {
         }
     }
 
-
     public var hasReliableGlucose: Bool {
-        guard case .known(let state) = self else {
+        guard case let .known(state) = self else {
             return false
         }
 
@@ -120,11 +121,11 @@ public enum AlgorithmState: RawRepresentable {
 }
 
 extension AlgorithmState: Equatable {
-    public static func ==(lhs: AlgorithmState, rhs: AlgorithmState) -> Bool {
+    public static func == (lhs: AlgorithmState, rhs: AlgorithmState) -> Bool {
         switch (lhs, rhs) {
-        case (.known(let lhs), .known(let rhs)):
+        case let (.known(lhs), .known(rhs)):
             return lhs == rhs
-        case (.unknown(let lhs), .unknown(let rhs)):
+        case let (.unknown(lhs), .unknown(rhs)):
             return lhs == rhs
         default:
             return false
@@ -135,9 +136,9 @@ extension AlgorithmState: Equatable {
 extension AlgorithmState: CustomStringConvertible {
     public var description: String {
         switch self {
-        case .known(let state):
+        case let .known(state):
             return String(describing: state)
-        case .unknown(let value):
+        case let .unknown(value):
             return ".unknown(\(value))"
         }
     }

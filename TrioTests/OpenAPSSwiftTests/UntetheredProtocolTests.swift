@@ -26,8 +26,7 @@ import Testing
     /// during a later start. The watch answers any query, mid-takeover with "not holding", stamped with the current
     /// epoch. The phone must not read that as the answer to a question it never asked in this session: it would take
     /// the pump back while the watch goes on to take it and loop, with neither side noticing.
-    @Test("start: a reply to an earlier session's status query doesn't take the pump mid-takeover")
-    func staleStatusReport() {
+    @Test("start: a reply to an earlier session's status query doesn't take the pump mid-takeover") func staleStatusReport() {
         var phone = UntetheredSession()
         var watch = UntetheredSession()
 
@@ -66,8 +65,7 @@ import Testing
         #expect(watch.phase == .active)
     }
 
-    @Test("start: an answer to the phone's own query still ends a start the watch didn't take")
-    func solicitedStatusReport() {
+    @Test("start: an answer to the phone's own query still ends a start the watch didn't take") func solicitedStatusReport() {
         var phone = UntetheredSession()
         _ = phone.phone(.start(base.grant(lease: 60)), now: t0)
         _ = phone.phone(.received(.prepared, epoch: phone.epoch), now: t0)
@@ -79,8 +77,7 @@ import Testing
         #expect(phone.isIdle)
     }
 
-    @Test("start: the phone's epochs only grow, also when its clock goes back")
-    func epochAfterClockChange() {
+    @Test("start: the phone's epochs only grow, also when its clock goes back") func epochAfterClockChange() {
         var phone = UntetheredSession()
         _ = phone.phone(.start(base.grant()), now: t0)
         let first = phone.epoch
@@ -90,8 +87,7 @@ import Testing
         #expect(phone.epoch == first + 1)
     }
 
-    @Test("start: an end while the phone still offers the start keeps the pump on the phone")
-    func endWhilePreparing() {
+    @Test("start: an end while the phone still offers the start keeps the pump on the phone") func endWhilePreparing() {
         var phone = UntetheredSession()
         _ = phone.phone(.start(base.grant()), now: t0)
         #expect(phone.phone(.end, now: t0 + 5) == [])
@@ -101,8 +97,7 @@ import Testing
         #expect(phone.isIdle)
     }
 
-    @Test("start: the watch accepts the phone's repeated offer and stays on its epoch")
-    func repeatedPrepare() {
+    @Test("start: the watch accepts the phone's repeated offer and stays on its epoch") func repeatedPrepare() {
         var watch = UntetheredSession()
         let grant = base.grant()
         #expect(watch.watch(.received(.prepare(grant), epoch: 7), now: t0) == [.send(.prepared)])
@@ -118,8 +113,7 @@ import Testing
         #expect(watch.phase == .starting)
     }
 
-    @Test("start: the watch's takeover past its lease lets go and says so")
-    func lateTakeoverSuccess() {
+    @Test("start: the watch's takeover past its lease lets go and says so") func lateTakeoverSuccess() {
         var watch = UntetheredSession()
         _ = watch.watch(.received(.prepare(base.grant(lease: 60)), epoch: 7), now: t0)
         _ = watch.watch(.received(.commit(handover), epoch: 7), now: t0 + 1)
@@ -132,8 +126,7 @@ import Testing
         #expect(watch.isIdle)
     }
 
-    @Test("start: a failed pod read on the watch gives the pump back to the phone")
-    func takeoverFailedOnWatch() {
+    @Test("start: a failed pod read on the watch gives the pump back to the phone") func takeoverFailedOnWatch() {
         var phone = UntetheredSession()
         var watch = UntetheredSession()
         let grant = base.grant()
@@ -153,8 +146,9 @@ import Testing
         #expect(watch.isIdle)
     }
 
-    @Test("start: the watch's word for its own session decides, an older or the same epoch doesn't")
-    func watchHoldsPumpWhileStarting() {
+    @Test(
+        "start: the watch's word for its own session decides, an older or the same epoch doesn't"
+    ) func watchHoldsPumpWhileStarting() {
         var phone = UntetheredSession()
         _ = phone.phone(.start(base.grant(lease: 60)), now: t0)
         _ = phone.phone(.received(.prepared, epoch: phone.epoch), now: t0)
@@ -177,8 +171,7 @@ import Testing
         #expect(newerNotHolding.epoch == epoch + 1)
     }
 
-    @Test("revoke: a watch that never took the pump has nothing to release")
-    func revokeByPhase() {
+    @Test("revoke: a watch that never took the pump has nothing to release") func revokeByPhase() {
         var preparing = UntetheredSession()
         _ = preparing.watch(.received(.prepare(base.grant()), epoch: 7), now: t0)
         #expect(preparing.watch(.received(.revoke, epoch: 7), now: t0 + 1) == [])

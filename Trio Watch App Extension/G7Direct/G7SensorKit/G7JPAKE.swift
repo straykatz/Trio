@@ -1,10 +1,3 @@
-//
-//  G7JPAKE.swift
-//  G7SensorKit
-//
-//  Copyright © 2026 LoopKit Authors. All rights reserved.
-//
-
 import CryptoKit
 import Foundation
 
@@ -27,7 +20,6 @@ enum G7JPAKEError: Error {
 /// randomizer rather than a fresh one, and the transcript hash covers
 /// length-prefixed uncompressed points in a specific order.
 final class G7JPAKE {
-
     typealias RandomBytesGenerator = (Int) -> Data
 
     /// Party identifier attached to proofs we generate.
@@ -38,8 +30,10 @@ final class G7JPAKE {
 
     /// The randomizer the sensor expects in our round-3 proof. Fixed, not
     /// drawn fresh: the sensor reproduces this value when it verifies.
-    private static let round3Randomizer = G7BigUInt(bigEndianBytes: Data(hexadecimalString:
-        "fbc971b837e9491e45a4179ed33865c508a1e0a1d350f5af0f96370695fdc393")!)
+    private static let round3Randomizer = G7BigUInt(bigEndianBytes: Data(
+        hexadecimalString:
+        "fbc971b837e9491e45a4179ed33865c508a1e0a1d350f5af0f96370695fdc393"
+    )!)
 
     /// The pairing code as a big-endian integer over its ASCII digits.
     private let pin: G7BigUInt

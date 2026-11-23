@@ -167,94 +167,94 @@ enum UntetheredAlgorithm {
 
     // LoopKit's pump events: in the app and on the watch, not in the algorithm package.
     #if canImport(LoopKit)
-    /// A bolus as `PumpHistoryStorage.storePumpEvents` stores it: rounded to the increment in `Double`, kept as the
-    /// `Decimal` of that `Double`.
-    static func storedBolus(_ dose: DoseEntry, bolusIncrement: Decimal) -> Decimal {
-        let increment = NSDecimalNumber(decimal: bolusIncrement).doubleValue
-        return Decimal((dose.unitsInDeliverableIncrements / increment).rounded() * increment)
-    }
+        /// A bolus as `PumpHistoryStorage.storePumpEvents` stores it: rounded to the increment in `Double`, kept as the
+        /// `Decimal` of that `Double`.
+        static func storedBolus(_ dose: DoseEntry, bolusIncrement: Decimal) -> Decimal {
+            let increment = NSDecimalNumber(decimal: bolusIncrement).doubleValue
+            return Decimal((dose.unitsInDeliverableIncrements / increment).rounded() * increment)
+        }
 
-    /// The phone's `PumpHistoryStorage.storePumpEvents` + `PumpEventStored.toPumpHistoryEvents`, without the
-    /// database, through the same `Double` and `Decimal` steps. Scheduled basal stays out, as
-    /// `pumpHistoryLast1440Minutes` leaves it out.
-    static func historyEvents(_ event: NewPumpEvent, id: String, bolusIncrement: Decimal) -> [PumpHistoryEvent] {
-        let timestamp = min(event.date, Date())
-        switch event.type {
-        case .bolus:
-            guard let dose = event.dose else { return [] }
-            return [PumpHistoryEvent(
-                id: id,
-                type: .bolus,
-                timestamp: timestamp,
-                amount: algorithmValue(storedBolus(dose, bolusIncrement: bolusIncrement)),
-                duration: 0,
-                isSMB: dose.automatic ?? true,
-                isExternal: dose.manuallyEntered
-            )]
-        case .tempBasal:
-            guard let dose = event.dose else { return [] }
-            return [
-                PumpHistoryEvent(
+        /// The phone's `PumpHistoryStorage.storePumpEvents` + `PumpEventStored.toPumpHistoryEvents`, without the
+        /// database, through the same `Double` and `Decimal` steps. Scheduled basal stays out, as
+        /// `pumpHistoryLast1440Minutes` leaves it out.
+        static func historyEvents(_ event: NewPumpEvent, id: String, bolusIncrement: Decimal) -> [PumpHistoryEvent] {
+            let timestamp = min(event.date, Date())
+            switch event.type {
+            case .bolus:
+                guard let dose = event.dose else { return [] }
+                return [PumpHistoryEvent(
                     id: id,
-                    type: .tempBasalDuration,
+                    type: .bolus,
                     timestamp: timestamp,
-                    durationMin: Int((dose.endDate.timeIntervalSince(dose.startDate) / 60).rounded())
-                ),
-                PumpHistoryEvent(
-                    id: rateID(id),
+                    amount: algorithmValue(storedBolus(dose, bolusIncrement: bolusIncrement)),
+                    duration: 0,
+                    isSMB: dose.automatic ?? true,
+                    isExternal: dose.manuallyEntered
+                )]
+            case .tempBasal:
+                guard let dose = event.dose else { return [] }
+                return [
+                    PumpHistoryEvent(
+                        id: id,
+                        type: .tempBasalDuration,
+                        timestamp: timestamp,
+                        durationMin: Int((dose.endDate.timeIntervalSince(dose.startDate) / 60).rounded())
+                    ),
+                    PumpHistoryEvent(
+                        id: rateID(id),
+                        type: .tempBasal,
+                        timestamp: timestamp,
+                        rate: algorithmValue(Decimal(dose.unitsPerHour)),
+                        temp: .absolute
+                    )
+                ]
+            case .suspend:
+                return [PumpHistoryEvent(id: id, type: .pumpSuspend, timestamp: timestamp)]
+            case .resume:
+                return [PumpHistoryEvent(id: id, type: .pumpResume, timestamp: timestamp)]
+            default:
+                return []
+            }
+        }
+
+        /// `PumpHistoryStorage.getPumpHistory`'s shape: a temp basal keeps its rate in `amount`, its minutes in
+        /// `duration` and the pump's delivered total; scheduled basal rows are flagged.
+        static func tddEvent(_ event: NewPumpEvent, id: String, bolusIncrement: Decimal) -> PumpHistoryEvent? {
+            let timestamp = min(event.date, Date())
+            switch event.type {
+            case .bolus:
+                // `getPumpHistory` reads the stored amount as it is
+                guard let dose = event.dose else { return nil }
+                return PumpHistoryEvent(
+                    id: id,
+                    type: .bolus,
+                    timestamp: timestamp,
+                    amount: storedBolus(dose, bolusIncrement: bolusIncrement),
+                    duration: 0,
+                    isSMB: dose.automatic ?? true,
+                    isExternal: dose.manuallyEntered
+                )
+            case .basal,
+                 .tempBasal:
+                guard let dose = event.dose else { return nil }
+                let isScheduledBasal = event.type == .basal
+                return PumpHistoryEvent(
+                    id: id,
                     type: .tempBasal,
                     timestamp: timestamp,
-                    rate: algorithmValue(Decimal(dose.unitsPerHour)),
-                    temp: .absolute
+                    amount: Decimal(dose.unitsPerHour),
+                    duration: isScheduledBasal ? 0 : Int((dose.endDate.timeIntervalSince(dose.startDate) / 60).rounded()),
+                    isScheduledBasal: isScheduledBasal,
+                    deliveredUnits: dose.deliveredUnits.map { Decimal($0) }
                 )
-            ]
-        case .suspend:
-            return [PumpHistoryEvent(id: id, type: .pumpSuspend, timestamp: timestamp)]
-        case .resume:
-            return [PumpHistoryEvent(id: id, type: .pumpResume, timestamp: timestamp)]
-        default:
-            return []
+            case .suspend:
+                return PumpHistoryEvent(id: id, type: .pumpSuspend, timestamp: timestamp)
+            case .resume:
+                return PumpHistoryEvent(id: id, type: .pumpResume, timestamp: timestamp)
+            default:
+                return nil
+            }
         }
-    }
-
-    /// `PumpHistoryStorage.getPumpHistory`'s shape: a temp basal keeps its rate in `amount`, its minutes in
-    /// `duration` and the pump's delivered total; scheduled basal rows are flagged.
-    static func tddEvent(_ event: NewPumpEvent, id: String, bolusIncrement: Decimal) -> PumpHistoryEvent? {
-        let timestamp = min(event.date, Date())
-        switch event.type {
-        case .bolus:
-            // `getPumpHistory` reads the stored amount as it is
-            guard let dose = event.dose else { return nil }
-            return PumpHistoryEvent(
-                id: id,
-                type: .bolus,
-                timestamp: timestamp,
-                amount: storedBolus(dose, bolusIncrement: bolusIncrement),
-                duration: 0,
-                isSMB: dose.automatic ?? true,
-                isExternal: dose.manuallyEntered
-            )
-        case .basal,
-             .tempBasal:
-            guard let dose = event.dose else { return nil }
-            let isScheduledBasal = event.type == .basal
-            return PumpHistoryEvent(
-                id: id,
-                type: .tempBasal,
-                timestamp: timestamp,
-                amount: Decimal(dose.unitsPerHour),
-                duration: isScheduledBasal ? 0 : Int((dose.endDate.timeIntervalSince(dose.startDate) / 60).rounded()),
-                isScheduledBasal: isScheduledBasal,
-                deliveredUnits: dose.deliveredUnits.map { Decimal($0) }
-            )
-        case .suspend:
-            return PumpHistoryEvent(id: id, type: .pumpSuspend, timestamp: timestamp)
-        case .resume:
-            return PumpHistoryEvent(id: id, type: .pumpResume, timestamp: timestamp)
-        default:
-            return nil
-        }
-    }
     #endif
 
     // MARK: TDD

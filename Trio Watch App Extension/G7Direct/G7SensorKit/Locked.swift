@@ -1,12 +1,4 @@
-//
-//  Locked.swift
-//  LoopKit
-//
-//  Copyright © 2018 LoopKit Authors. All rights reserved.
-//
-
 import os.lock
-
 
 internal class Locked<T> {
     // A heap pointer rather than a stored struct: `&lock` on a property holds

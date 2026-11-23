@@ -177,7 +177,9 @@ final class UntetheredStore {
                 return true
             }
             if !isLocked {
-                Task { await WatchLogger.shared.log("⌚️ Untethered: saved state locked, nothing saved until it opens: \(error)", force: true) }
+                Task {
+                    await WatchLogger.shared
+                        .log("⌚️ Untethered: saved state locked, nothing saved until it opens: \(error)", force: true) }
             }
             isLocked = true
             return false

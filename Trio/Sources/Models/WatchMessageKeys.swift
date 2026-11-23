@@ -199,7 +199,10 @@ enum WatchGlanceItem: String, CaseIterable, Codable, Hashable {
     var label: String {
         switch self {
         case .glucoseLarge: return String(localized: "Glucose", comment: "Watch minimal screen: large glucose")
-        case .glucoseChart: return String(localized: "Glucose and Chart", comment: "Watch minimal screen: glucose above the chart")
+        case .glucoseChart: return String(
+                localized: "Glucose and Chart",
+                comment: "Watch minimal screen: glucose above the chart"
+            )
         case .chart: return String(localized: "Chart", comment: "Watch minimal screen: glucose chart with forecast")
         case .glucose: return String(localized: "BG", comment: "Watch minimal screen: small glucose")
         case .loop: return String(localized: "Loop", comment: "Watch minimal screen: loop status")
