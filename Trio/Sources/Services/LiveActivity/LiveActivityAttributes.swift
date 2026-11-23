@@ -44,6 +44,9 @@ struct LiveActivityAttributes: ActivityAttributes {
 
         /// true for the first state that is set on the activity
         let isInitialState: Bool
+        /// The watch has the pump (watch mode): the iPhone's loop data is the watch's to give, so the activity shows
+        /// "Watch mode" instead of its last loop, and goes stale by the readings only. Optional: older states decode.
+        var watchMode: Bool? = nil
     }
 
     struct ContentAdditionalState: Codable, Hashable {

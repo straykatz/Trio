@@ -9,16 +9,16 @@ struct LiveActivityCOBLabelView: View {
     var body: some View {
         VStack(spacing: 2) {
             HStack {
-                Text("\(additionalState.cob)" as String)
+                Text(context.state.watchMode == true ? "--" : "\(additionalState.cob)" as String)
                     .fontWeight(.bold)
                     .font(.title3)
-                    .foregroundStyle(context.isStale ? .secondary : .primary)
-                    .strikethrough(context.isStale, pattern: .solid, color: .red.opacity(0.6))
+                    .foregroundStyle(context.isStale || context.state.watchMode == true ? .secondary : .primary)
+                    .strikethrough(context.isStale && context.state.watchMode != true, pattern: .solid, color: .red.opacity(0.6))
 
                 Text(String(localized: "g", comment: "gram of carbs"))
                     .font(.headline).fontWeight(.bold)
-                    .foregroundStyle(context.isStale ? .secondary : .primary)
-                    .strikethrough(context.isStale, pattern: .solid, color: .red.opacity(0.6))
+                    .foregroundStyle(context.isStale || context.state.watchMode == true ? .secondary : .primary)
+                    .strikethrough(context.isStale && context.state.watchMode != true, pattern: .solid, color: .red.opacity(0.6))
             }
             Text("COB")
                 .font(.subheadline)
