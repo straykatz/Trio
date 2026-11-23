@@ -20,6 +20,9 @@ protocol APSManager {
     var pumpName: CurrentValueSubject<String, Never> { get }
     var isLooping: CurrentValueSubject<Bool, Never> { get }
     var lastLoopDate: Date { get }
+    /// The untethered hand-back carries the watch's last loop over: the loop's age and the minimum interval to the
+    /// next loop both count from it, so the phone doesn't loop again straight away.
+    func adoptLoop(at date: Date)
     var lastLoopDateSubject: PassthroughSubject<Date, Never> { get }
     var bolusProgress: CurrentValueSubject<Decimal?, Never> { get }
     var pumpExpiresAtDate: CurrentValueSubject<Date?, Never> { get }
@@ -98,6 +101,13 @@ private actor LoopGuard {
         waiters.forEach { $0.resume() }
     }
 
+    /// Claims the guard as a loop would, for a dose outside the loop that must not overlap one; `finish()` frees it.
+    func tryClaim() -> Bool {
+        guard !isRunning else { return false }
+        isRunning = true
+        return true
+    }
+
     /// Returns once no loop is running.
     func waitForLoop() async {
         guard isRunning else { return }
@@ -133,6 +143,13 @@ final class BaseAPSManager: APSManager, Injectable {
     @Injected() private var broadcaster: Broadcaster!
     @Injected() private var trioAlertManager: TrioAlertManager!
     @Persisted(key: "lastLoopStartDate") private var lastLoopStartDate: Date = .distantPast
+
+    func adoptLoop(at date: Date) {
+        guard date > lastLoopDate else { return }
+        lastLoopStartDate = date
+        lastLoopDate = date
+    }
+
     private var lastDosingMode: DosingMode?
     @Persisted(key: "lastLoopDate") var lastLoopDate: Date = .distantPast {
         didSet {
@@ -306,6 +323,14 @@ final class BaseAPSManager: APSManager, Injectable {
                 return
             }
 
+            guard UntetheredGate.phoneMayDose else {
+                debug(.loop, "The watch is in charge of the pump (untethered) — skipping loop attempt")
+                return
+            }
+            guard !UntetheredGate.watchRecordsPending else {
+                debug(.loop, "Waiting for the watch's records after the take-back (untethered) — skipping loop attempt")
+                return
+            }
             // Before the loop starts, so the loop doses with the new profile.
             await self.therapyProfileManager?.runDueScheduledSwitch()
 
@@ -375,12 +400,12 @@ final class BaseAPSManager: APSManager, Injectable {
 
     /// Returns whether the determination was enacted.
     private func executeLoop(loopStatRecord: inout LoopStats) async throws -> Bool {
-        try await determineBasal()
+        let determination = try await determineBasal()
 
         // Closed loop: also enact the determination.
         var enacted = false
         if settings.dosingMode.automation != .off {
-            enacted = try await enactDetermination()
+            enacted = try await enactDetermination(id: determination?.id)
         }
 
         let endDate = Date()
@@ -443,6 +468,16 @@ final class BaseAPSManager: APSManager, Injectable {
         guard let pump = pumpManager else {
             return APSError.invalidPumpState(message: String(localized: "Pump not set"))
         }
+        guard UntetheredGate.phoneMayDose else {
+            return APSError.invalidPumpState(message: String(localized: "The watch is in charge of the pump"))
+        }
+        guard !UntetheredGate.watchRecordsPending else {
+            return APSError.invalidPumpState(
+                message: String(
+                    localized: "The watch's records aren't in yet, so insulin on board is incomplete. Try again in a minute."
+                )
+            )
+        }
         let status = pump.status.pumpStatus
 
         guard !status.bolusing else {
@@ -457,9 +492,8 @@ final class BaseAPSManager: APSManager, Injectable {
     }
 
     private func autosense() async throws -> Bool {
-        guard let autosense = await storage.retrieveAsync(OpenAPS.Settings.autosense, as: Autosens.self),
-              (autosense.timestamp ?? .distantPast).addingTimeInterval(30.minutes.timeInterval) > Date()
-        else {
+        let autosense = await storage.retrieveAsync(OpenAPS.Settings.autosense, as: Autosens.self)
+        guard OrefPipeline.autosensIsCurrent(autosense, now: Date()) else {
             let result = try await openAPS.autosense(
                 shouldSmoothGlucose: settingsManager.settings.smoothGlucose
             )
@@ -483,10 +517,10 @@ final class BaseAPSManager: APSManager, Injectable {
         )
 
         // Store TDD in Core Data
-        await tddStorage.storeTDD(tddResult)
+        await tddStorage.storeTDD(tddResult, at: Date())
     }
 
-    private func determineBasal() async throws {
+    @discardableResult private func determineBasal() async throws -> Determination? {
         try await calculateAndStoreTDD()
 
         var invalidGlucoseError: String?
@@ -565,6 +599,7 @@ final class BaseAPSManager: APSManager, Injectable {
                     }
                 }
             }
+            return determination
         } catch {
             iobFileDidUpdate.send(())
 
@@ -581,6 +616,8 @@ final class BaseAPSManager: APSManager, Injectable {
     }
 
     func determineBasalSync() async throws {
+        // the watch's determinations arrive with its history
+        guard UntetheredGate.phoneMayDose else { return }
         await loopGuard.waitForLoop()
         guard await loopGuard.tryStartStandaloneDetermination() else {
             debug(.loop, "Standalone determination skipped: one is already running")
@@ -634,6 +671,7 @@ final class BaseAPSManager: APSManager, Injectable {
     }
 
     func enactBolus(amount: Double, isSMB: Bool, callback: ((Bool, String) -> Void)?) async {
+        let requestedAt = Date()
         // Answer every caller: a silent return here left the watch waiting on "Processing…" forever
         guard amount > 0 else {
             warning(.bolus, "Bolus of \(amount) U not enacted, amount must be above 0")
@@ -672,6 +710,7 @@ final class BaseAPSManager: APSManager, Injectable {
 
         do {
             try await pump.enactBolus(units: roundedAmount, automatic: isSMB)
+            PhoneLastDose.note()
             info(.bolus, "Bolus enacted: \(roundedAmount) U, \(isSMB ? "automatic" : "manual")")
             bolusProgress.send(0)
             callback?(true, String(localized: "Bolus enacted successfully.", comment: "Success message for enacting a bolus"))
@@ -685,11 +724,83 @@ final class BaseAPSManager: APSManager, Injectable {
         } catch let bolusError {
             error(.bolus, "Bolus of \(roundedAmount) U failed", error: bolusError)
             lastError.send(APSError.pumpError(bolusError))
+            // Refused before anything reached the pod: the watch had just looked at it, which counts as another
+            // controller's session. The phone now asks the watch, and once it answers "not holding" the loop runs
+            // again by itself (10 November, third tester: each refused loop dosed again within 5–8 s). Nothing was
+            // given, so a bolus asked for by hand says that plainly instead of "check pump history"; an SMB says
+            // nothing, as the loop that follows decides afresh.
+            var retryError: Error?
+            if String(describing: bolusError).contains("Another controller has used this pod") {
+                if !isSMB {
+                    switch await retryRefusedBolus(
+                        units: roundedAmount,
+                        requestedAt: requestedAt,
+                        refusedAt: Date(),
+                        pump: pump
+                    ) {
+                    case .given:
+                        PhoneLastDose.note()
+                        info(.bolus, "Bolus enacted on the second try: \(roundedAmount) U, manual")
+                        bolusProgress.send(0)
+                        callback?(
+                            true,
+                            String(localized: "Bolus enacted successfully.", comment: "Success message for enacting a bolus")
+                        )
+                        do {
+                            try await determineBasalSync()
+                        } catch {
+                            warning(.loop, "Determination after manual bolus failed", error: error)
+                        }
+                        return
+                    case let .failed(error):
+                        // the second try reached the pod and failed there: what it gave isn't known
+                        retryError = error
+                    case .notTried,
+                         .refusedAgain:
+                        break
+                    }
+                }
+            }
+            if retryError == nil, String(describing: bolusError).contains("Another controller has used this pod") {
+                // the refusal may also come from a session of the watch's the phone hadn't heard of: then the watch
+                // has the pump (Ponytail's review, 15 November)
+                let watchHasPump = await MainActor.run { () -> Bool in
+                    let session = UntetheredGate.state.session
+                    return !session.isIdle && !session.isCheckingForeignSession
+                }
+                let message = watchHasPump
+                    ? String(
+                        localized: "Nothing was given: the watch has the pump. Bolus on the watch.",
+                        comment: "A bolus refused before it reached the pod, because the watch holds the pump"
+                    )
+                    : String(
+                        localized: "Nothing was given: the watch was checking the pod. Please try again in a moment.",
+                        comment: "A bolus refused before it reached the pod, because the watch had just looked at the pod"
+                    )
+                if isSMB {
+                    debug(.bolus, "SMB of \(roundedAmount) U refused after the watch's look at the pod; the next loop decides")
+                } else {
+                    issueAlertForCategory(.bolusFailed, title: String(localized: "Bolus not given"), body: message)
+                    let broadcaster = self.broadcaster
+                    Task { @MainActor in
+                        broadcaster?.notify(BolusFailureObserver.self, on: .main) {
+                            $0.bolusDidFail()
+                        }
+                    }
+                }
+                callback?(false, message)
+                return
+            }
+            // with the iPhone's Bluetooth off the pump reads as "not connected": say why (28 October, flight mode)
+            let bluetoothOff = await MainActor.run { self.bluetoothManager?.bluetoothState == .poweredOff }
+            let reason = bluetoothOff
+                ? String(localized: "The iPhone's Bluetooth is off, so it couldn't reach the pump.")
+                : (retryError ?? bolusError).localizedDescription
             issueAlertForCategory(
                 .bolusFailed,
                 title: String(localized: "Bolus failed"),
                 body: String(localized: "Check pump history before repeating.")
-                    + "\n\n\(bolusError.localizedDescription)"
+                    + "\n\n\(reason)"
             )
             if !isSMB {
                 let broadcaster = self.broadcaster
@@ -701,8 +812,81 @@ final class BaseAPSManager: APSManager, Injectable {
             }
             callback?(
                 false,
-                String(localized: "Error! Bolus failed with error: \(bolusError.localizedDescription)")
+                String(localized: "Error! Bolus failed with error: \(reason)")
             )
+        }
+    }
+
+    enum RefusedBolusRetry {
+        case given
+        case notTried
+        case refusedAgain
+        case failed(Error)
+    }
+
+    /// How long after the request the second try may start: a bolus asked for on the watch is then answered before the
+    /// watch's 15 s acknowledgement wait ends, the bolus command taking a few seconds more. From the request, not the
+    /// refusal: a slow first connect can take most of it (Claude Fable's review, 14 November).
+    static let refusedBolusRetryWindow: TimeInterval = 11
+
+    /// A bolus asked for by hand, refused before anything reached the pod because the watch had just looked at it.
+    /// The phone asks the watch at once and, when the watch doesn't hold the pump, has it back within a second or two
+    /// (third tester, 12 November: a 1.4 U bolus refused, the pump back on the phone 2 s later). The bolus is then given once
+    /// more by itself instead of asking for it again; only after a return that ended a look and whose audit found no
+    /// insulin from elsewhere, if no other dose went out since the refusal and none is running, and only within
+    /// `refusedBolusRetryWindow`. The pump's return starts a loop: the second try waits for it and holds the loop off
+    /// while it runs, so the loop's SMB and the bolus never pass each other unseen.
+    private func retryRefusedBolus(
+        units: Double,
+        requestedAt: Date,
+        refusedAt: Date,
+        pump: PumpManager
+    ) async -> RefusedBolusRetry {
+        let deadline = requestedAt.addingTimeInterval(Self.refusedBolusRetryWindow)
+        while Date() < deadline {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard (PhonePumpReturn.date ?? .distantPast) > refusedAt else { continue }
+            guard (PhonePumpReturn.cleanLookDate ?? .distantPast) > refusedAt else {
+                debug(.bolus, "Refused bolus of \(units) U not tried again: the pump came back from more than a look")
+                return .notTried
+            }
+            // the loop the return started goes first, then none starts until this try is done
+            await loopGuard.waitForLoop()
+            guard await loopGuard.tryClaim() else { continue }
+            let outcome = await tryRefusedBolusOnce(units: units, refusedAt: refusedAt, deadline: deadline, pump: pump)
+            await loopGuard.finish()
+            // a loop the claim held off runs now, with this bolus (if given) in its records; as at the return, only for a
+            // reading no loop has had yet
+            if (glucoseStorage.lastGlucoseDate() ?? .distantPast) > lastLoopDate { heartbeat(date: Date()) }
+            return outcome
+        }
+        debug(.bolus, "Refused bolus of \(units) U not tried again: the pump didn't come back in time")
+        return .notTried
+    }
+
+    private func tryRefusedBolusOnce(
+        units: Double,
+        refusedAt: Date,
+        deadline: Date,
+        pump: PumpManager
+    ) async -> RefusedBolusRetry {
+        guard Date() < deadline, UntetheredGate.phoneMayDose,
+              (PhoneLastDose.date ?? .distantPast) < refusedAt,
+              !pump.status.pumpStatus.bolusing
+        else {
+            debug(.bolus, "Refused bolus of \(units) U not tried again: a dose went out meanwhile, it is too late, or the phone may not dose")
+            return .notTried
+        }
+        debug(.bolus, "Bolus of \(units) U was refused after the watch's look at the pod; the pump is back, trying once more")
+        do {
+            try await pump.enactBolus(units: units, automatic: false)
+            return .given
+        } catch {
+            if String(describing: error).contains("Another controller has used this pod") {
+                warning(.bolus, "Second try of the bolus of \(units) U refused as well; nothing was given")
+                return .refusedAgain
+            }
+            return .failed(error)
         }
     }
 
@@ -781,10 +965,11 @@ final class BaseAPSManager: APSManager, Injectable {
     }
 
     /// Returns false when the determination is skipped because the pump is suspended.
-    private func enactDetermination() async throws -> Bool {
-        guard let determinationID = try await determinationStorage
-            .fetchLastDeterminationObjectID(predicate: NSPredicate.predicateFor30MinAgoForDetermination).first
-        else {
+    private func enactDetermination(id: UUID?) async throws -> Bool {
+        // only the determination this cycle saved; never fall back to an older one
+        let context = CoreDataStack.shared.newTaskContext()
+        context.name = "enactDetermination"
+        guard let id, let values = try await Self.dosingValues(ofDeterminationWithID: id, on: context) else {
             throw APSError.apsError(message: "Determination not found")
         }
 
@@ -802,38 +987,38 @@ final class BaseAPSManager: APSManager, Injectable {
             throw APSError.manualBasalTemp(message: "Loop not possible during the manual basal temp")
         }
 
-        let (rateDecimal, durationInSeconds, smbToDeliver) = try await setValues(determinationID: determinationID)
+        let (rateDecimal, durationInSeconds, smbToDeliver) = values
 
         if let rate = rateDecimal, let duration = durationInSeconds {
             try await performBasal(pump: pump, rate: rate, duration: duration)
+            PhoneLastDose.note()
             info(.loop, "Temp basal enacted: \(rate) U/h for \(Int(duration / 60)) min")
         }
 
         // only perform a bolus if smbToDeliver is > 0
         if let smb = smbToDeliver, smb.compare(NSDecimalNumber(value: 0)) == .orderedDescending {
             try await performBolus(pump: pump, smbToDeliver: smb)
+            PhoneLastDose.note()
             info(.loop, "SMB enacted: \(smb) U")
         }
         return true
     }
 
-    private func setValues(determinationID: NSManagedObjectID) async throws
-        -> (NSDecimalNumber?, TimeInterval?, NSDecimalNumber?)
+    /// Temp basal and SMB of the determination with this id; nil if it wasn't saved or was already enacted.
+    static func dosingValues(ofDeterminationWithID id: UUID, on context: NSManagedObjectContext) async throws
+        -> (NSDecimalNumber?, TimeInterval?, NSDecimalNumber?)?
     {
-        let context = CoreDataStack.shared.newTaskContext()
-        context.name = "setValues"
-        return try await context.perform {
-            do {
-                let determination = try context.existingObject(with: determinationID) as? OrefDetermination
+        try await context.perform {
+            let request = OrefDetermination.fetchRequest() as NSFetchRequest<OrefDetermination>
+            request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+            request.fetchLimit = 1
+            guard let determination = try context.fetch(request).first, !determination.enacted else { return nil }
 
-                let rate = determination?.rate
-                let duration = determination?.duration.flatMap { TimeInterval(truncating: $0) * 60 }
-                let smbToDeliver = determination?.smbToDeliver ?? 0
+            let rate = determination.rate
+            let duration = determination.duration.flatMap { TimeInterval(truncating: $0) * 60 }
+            let smbToDeliver = determination.smbToDeliver ?? 0
 
-                return (rate, duration, smbToDeliver)
-            } catch {
-                throw error
-            }
+            return (rate, duration, smbToDeliver)
         }
     }
 
@@ -1109,6 +1294,8 @@ extension BaseAPSManager: SettingsObserver {
 
         // Only basal testing clears a running temp. Elsewhere it may be protecting against a low,
         // and dropping back to scheduled basal would remove that protection.
+        // If the watch owns the pump, its loop performs this cleanup on the watch instead.
+        guard UntetheredGate.phoneMayDose else { return }
         guard settings.dosingMode == .basalTesting, previous != .basalTesting else { return }
 
         Task { await cancelAutomaticTempBasal() }
@@ -1148,5 +1335,46 @@ extension PumpManagerStatus {
         let suspended = basalDeliveryState.map { $0.isSuspended || $0 == .pumpInoperable } ?? true
         let type = suspended ? StatusType.suspended : (bolusing ? .bolusing : .normal)
         return PumpStatus(status: type, bolusing: bolusing, suspended: suspended, timestamp: Date())
+    }
+}
+
+/// When the pump last came back to the phone from the watch, or from a look of the watch's at the pod.
+enum PhonePumpReturn {
+    private static let key = "untethered.phonePumpReturnDate"
+    private static let cleanLookKey = "untethered.phonePumpReturnCleanLookDate"
+
+    static var date: Date? {
+        UserDefaults.standard.object(forKey: key) as? Date
+    }
+
+    /// The last return that ended a look only: the watch answered "not holding" for the phone's own session, and the
+    /// pod's delivered total matched the records. Only after such a return may a refused bolus be given by itself: after
+    /// any other (the watch ran a session, released, or the audit booked insulin no record explains) the bolus was
+    /// worked out without insulin the phone didn't know of (Claude Fable's review, 14 November).
+    static var cleanLookDate: Date? {
+        UserDefaults.standard.object(forKey: cleanLookKey) as? Date
+    }
+
+    static func note(_ date: Date = Date(), cleanLook: Bool) {
+        UserDefaults.standard.set(date, forKey: key)
+        if cleanLook { UserDefaults.standard.set(date, forKey: cleanLookKey) }
+    }
+}
+
+/// When the phone last enacted a dose command on the pod: a temp basal or a bolus, automatic or by hand. Sent to the
+/// watch with its state, where it counts as word from the phone besides its readings: a phone that doses is looping,
+/// even when one of its readings didn't come (8 November, 17:21: the watch looked at the pod a minute after the phone's
+/// bolus, its newest reading being 5.5 minutes old). Pod contact alone doesn't count: a phone without a sensor still
+/// reaches the pod for status reads and heartbeats, and that would keep the watch from taking over from a phone that
+/// can't loop (8 November, 11:48 to 14:06).
+enum PhoneLastDose {
+    private static let key = "untethered.phoneLastDoseDate"
+
+    static var date: Date? {
+        UserDefaults.standard.object(forKey: key) as? Date
+    }
+
+    static func note(_ date: Date = Date()) {
+        UserDefaults.standard.set(date, forKey: key)
     }
 }

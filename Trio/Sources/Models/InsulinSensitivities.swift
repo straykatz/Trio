@@ -4,7 +4,7 @@ protocol InsulinSensitivitiesObserver {
     func insulinSensitivitiesDidChange(_ sensitivities: InsulinSensitivities)
 }
 
-struct InsulinSensitivities: JSON {
+struct InsulinSensitivities: JSON, Equatable {
     var units: GlucoseUnits
     var userPreferredUnits: GlucoseUnits
     var sensitivities: [InsulinSensitivityEntry]
@@ -18,7 +18,7 @@ extension InsulinSensitivities {
     }
 }
 
-struct InsulinSensitivityEntry: JSON {
+struct InsulinSensitivityEntry: JSON, Equatable {
     let sensitivity: Decimal
     let offset: Int
     let start: String

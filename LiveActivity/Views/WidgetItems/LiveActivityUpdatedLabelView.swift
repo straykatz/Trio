@@ -16,6 +16,33 @@ struct LiveActivityUpdatedLabelView: View {
     }
 
     var body: some View {
+        if context.state.watchMode == true {
+            watchModeLabel
+        } else {
+            updatedLabel
+        }
+    }
+
+    /// The watch loops: no time of the iPhone's last loop, which is old by design.
+    @ViewBuilder private var watchModeLabel: some View {
+        if isWatchOS || !isDetailedLayout {
+            Label(String(localized: "Watch mode"), systemImage: "applewatch")
+                .font(.subheadline)
+                .bold()
+                .foregroundStyle(.secondary)
+        } else {
+            VStack {
+                Image(systemName: "applewatch")
+                    .font(.title3)
+                    .bold()
+                Text("Watch mode")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+            }
+        }
+    }
+
+    @ViewBuilder private var updatedLabel: some View {
         let dateText = Text("\((context.state.date != nil) ? dateFormatter.string(from: context.state.date!) : "--")")
 
         if isWatchOS {

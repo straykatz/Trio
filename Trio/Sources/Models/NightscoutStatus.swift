@@ -4,7 +4,10 @@ struct NightscoutStatus: JSON {
     let device: String
     let openaps: OpenAPSStatus
     let pump: NSPumpStatus
-    let uploader: Uploader
+    /// nil for a past loop, whose phone battery isn't known.
+    let uploader: Uploader?
+    /// The loop's own time; without it Nightscout stamps the status when it arrives.
+    var created_at: Date? = nil
 }
 
 struct OpenAPSStatus: JSON {
@@ -80,6 +83,10 @@ struct NightscoutProfileStore: JSON {
     let expirationDate: Date?
     /// Remote command types this build accepts; followers hide unsupported actions.
     let remoteCommands: [String]?
+    /// The Apple Watch app's push token and bundle identifier, for a follower to send a remote bolus or meal straight
+    /// to the watch while it runs the loop untethered. Left out without a watch.
+    var watchDeviceToken: String? = nil
+    var watchBundleIdentifier: String? = nil
     var profileEditLimits: NightscoutProfileEditLimits? = nil
     /// Default is named by its store key.
     var scheduledSwitches: [ScheduledProfileSwitch]? = nil

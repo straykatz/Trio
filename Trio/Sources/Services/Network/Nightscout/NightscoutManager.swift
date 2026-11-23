@@ -19,10 +19,21 @@ protocol NightscoutManager: GlucoseSource {
     func uploadTempTargets() async
     func uploadProfiles() async throws
     @discardableResult func uploadNoteTreatment(note: String) async -> Bool
+    /// The time the Apple Watch looped, as a note with its duration.
+    /// - Parameter end: nil while the watch still has the pump; uploaded again with it at the end, which replaces it
+    @discardableResult func uploadUntetheredSession(from start: Date, to end: Date?) async -> Bool
     /// Uploads the profile switches and the profile document that have not reached Nightscout yet.
     func uploadTherapyProfiles() async
     func importSettings() async -> FetchedNightscoutProfileStore?
     var cgmURL: URL? { get }
+    /// Past loops, each as its own device status at its own time, so Nightscout's history shows their forecasts.
+    @discardableResult func uploadDeterminationHistory(_ determinations: [Determination]) async -> Bool
+    /// The newest loop in Nightscout, whichever device uploaded it; nil without Nightscout or when the fetch failed.
+    func fetchNewestDeviceStatusDate() async -> Date?
+}
+
+extension NightscoutManager {
+    func fetchNewestDeviceStatusDate() async -> Date? { nil }
 }
 
 final class BaseNightscoutManager: NightscoutManager, Injectable {
@@ -425,6 +436,16 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
         }
     }
 
+    func fetchNewestDeviceStatusDate() async -> Date? {
+        guard let nightscout = nightscoutAPI, isNetworkReachable else { return nil }
+        do {
+            return try await nightscout.fetchNewestDeviceStatusDate()
+        } catch {
+            warning(.nightscout, "Device status fetch failed", error: error)
+            return nil
+        }
+    }
+
     func fetchTempTargets() async -> [TempTarget] {
         guard let nightscout = nightscoutAPI, isNetworkReachable, isDownloadEnabled else {
             return []
@@ -710,7 +731,9 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
             device: NightscoutTreatment.local,
             openaps: openapsStatus,
             pump: pump,
-            uploader: uploader
+            uploader: uploader,
+            // the loop's own time: a backlog uploaded newest first still leaves Nightscout on the newest loop
+            created_at: fetchedEnactedDetermination?.timestamp ?? modifiedSuggestedDetermination?.deliverAt
         )
 
         do {
@@ -737,6 +760,62 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
         } catch {
             warning(.nightscout, "Device status upload failed", error: error)
         }
+    }
+
+    /// Past loops synced from the untethered watch. Each status carries that loop's IOB, reservoir and forecast and
+    /// its own time; the phone's current IOB, pump status and battery belong only to the live status.
+    @discardableResult func uploadDeterminationHistory(_ determinations: [Determination]) async -> Bool {
+        guard let nightscout = nightscoutAPI, isUploadEnabled else { return false }
+        let units = settingsManager.settings.units
+        let automates = settingsManager.settings.dosingMode.automation != .off
+        let bolusIncrement = settingsManager.preferences.bolusIncrement
+        for var determination in determinations.sorted(by: { ($0.deliverAt ?? .distantPast) < ($1.deliverAt ?? .distantPast) }) {
+            let enactedAt = determination.received == true ? determination.timestamp : nil
+            let time = enactedAt ?? determination.deliverAt ?? Date()
+            if units == .mmolL {
+                determination.reason = parseReasonGlucoseValuesToMmolL(determination.reason)
+                determination.current_target = determination.current_target?.asMmolL
+                determination.minGuardBG = determination.minGuardBG?.asMmolL
+                determination.minPredBG = determination.minPredBG?.asMmolL
+                determination.threshold = determination.threshold?.asMmolL
+            }
+            var suggested = determination
+            suggested.timestamp = determination.deliverAt
+            let iob = determination.iob.map {
+                IOBEntry(
+                    iob: $0, activity: 0, basaliob: 0, bolusiob: 0, netbasalinsulin: 0, bolusinsulin: 0,
+                    iobWithZeroTemp: nil, lastBolusTime: nil, lastTemp: nil, time: time
+                )
+            }
+            let status = NightscoutStatus(
+                device: NightscoutTreatment.local,
+                openaps: OpenAPSStatus(
+                    iob: iob,
+                    suggested: suggested,
+                    enacted: automates && enactedAt != nil ? determination : nil,
+                    version: Bundle.main.releaseVersionNumber ?? "Unknown",
+                    recommendedBolus: nil,
+                    dosingMode: settingsManager.settings.dosingMode.rawValue
+                ),
+                pump: NSPumpStatus(
+                    clock: time,
+                    battery: nil,
+                    reservoir: determination.reservoir,
+                    status: nil,
+                    bolusIncrement: bolusIncrement
+                ),
+                uploader: nil,
+                created_at: time
+            )
+            do {
+                try await nightscout.uploadDeviceStatus(status)
+            } catch {
+                debug(.nightscout, "Past device status upload failed: \(error)")
+                return false
+            }
+        }
+        debug(.nightscout, "Uploaded \(determinations.count) past device status(es)")
+        return true
     }
 
     private func updateOrefDeterminationAsUploaded(_ determination: [Determination]) async {
@@ -844,6 +923,9 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
                     teamID: teamID,
                     expirationDate: expireDate,
                     remoteCommands: remoteCommands,
+                    watchDeviceToken: UserDefaults.standard.string(forKey: BaseWatchManager.watchPushTokenKey),
+                    watchBundleIdentifier: UserDefaults.standard.string(forKey: BaseWatchManager.watchPushTokenKey) == nil
+                        ? nil : bundleIdentifier + ".watchkitapp",
                     profileEditLimits: profileEditLimits,
                     scheduledSwitches: scheduledSwitches,
                     scheduledSwitchesFingerprint: scheduledSwitches.fingerprint
@@ -1309,6 +1391,22 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
         }
     }
 
+    /// Its own event type rather than an override's "Exercise": nothing reads it as a running override, and followers
+    /// (LoopFollow) show it as a band of its own, running while there is no duration yet. Nightscout keeps one treatment
+    /// per time and type, so the end's upload replaces the start's.
+    @discardableResult func uploadUntetheredSession(from start: Date, to end: Date?) async -> Bool {
+        let note = NightscoutTreatment(
+            duration: end.map { max(1, Int(($0.timeIntervalSince(start) / 60).rounded())) },
+            eventType: .nsUntethered,
+            createdAt: start,
+            enteredBy: NightscoutTreatment.local,
+            notes: String(localized: "Watch mode on Apple Watch"),
+            targetTop: nil,
+            targetBottom: nil
+        )
+        return await uploadNonCoreDataTreatments([note])
+    }
+
     // TODO: have this checked; this has never actually written anything to file; the entire logic of this function seems broken
     @discardableResult func uploadNoteTreatment(note: String) async -> Bool {
         let uploadedNotes = storage.retrieve(OpenAPS.Nightscout.uploadedNotes, as: [NightscoutTreatment].self) ?? []
@@ -1384,130 +1482,9 @@ extension BaseNightscoutManager {
      */
 
     // TODO: Consolidate all mmol parsing methods (in TagCloudView, NightscoutManager and HomeRootView) to one central func
+    /// Shared with the untethered watch's own Nightscout upload (`UntetheredNightscout`).
     func parseReasonGlucoseValuesToMmolL(_ reason: String) -> String {
-        let patterns = [
-            "(?:ISF|Target):\\s*-?\\d+\\.?\\d*(?:→-?\\d+\\.?\\d*)+",
-            // ISF or Target with any number of “→value” segments after the first number
-            "Dev:\\s*-?\\d+\\.?\\d*", // Dev pattern
-            "BGI:\\s*-?\\d+\\.?\\d*", // BGI pattern
-            "Target:\\s*-?\\d+\\.?\\d*", // Target pattern
-            "(?:minPredBG|minGuardBG|IOBpredBG|COBpredBG|UAMpredBG)\\s+-?\\d+\\.?\\d*(?:<-?\\d+\\.?\\d*)?", // minPredBG, etc.
-            "minGuardBG\\s+-?\\d+\\.?\\d*<-?\\d+\\.?\\d*", // minGuardBG x<y
-            "Eventual BG\\s+-?\\d+\\.?\\d*\\s*>=\\s*-?\\d+\\.?\\d*", // Eventual BG x >= target
-            "Eventual BG\\s+-?\\d+\\.?\\d*\\s*<\\s*-?\\d+\\.?\\d*", // Eventual BG x < target
-            "\\S+\\s+\\d+\\s*>\\s*\\d+%\\s+of\\s+BG\\s+\\d+" // maxDelta x > y% of BG z
-        ]
-        let pattern = patterns.joined(separator: "|")
-        let regex = try! NSRegularExpression(pattern: pattern)
-
-        func convertToMmolL(_ value: String) -> String {
-            if let glucoseValue = Double(value.replacingOccurrences(of: "[^\\d.-]", with: "", options: .regularExpression)) {
-                let mmolValue = Decimal(glucoseValue).asMmolL
-                return mmolValue.description
-            }
-            return value
-        }
-
-        let matches = regex.matches(in: reason, range: NSRange(reason.startIndex..., in: reason))
-        var updatedReason = reason
-
-        for match in matches.reversed() {
-            guard let range = Range(match.range, in: reason) else { continue }
-            let glucoseValueString = String(reason[range])
-
-            if glucoseValueString.contains("→") {
-                // Handle ISF: X→Y… or Target: X→Y→Z…
-                let parts = glucoseValueString.components(separatedBy: ":")
-                guard parts.count == 2 else { continue }
-                let targetOrISF = parts[0].trimmingCharacters(in: .whitespaces)
-                let values = parts[1]
-                    .components(separatedBy: "→")
-                    .map { $0.trimmingCharacters(in: .whitespaces) }
-                let convertedValues = values.map { convertToMmolL($0) }
-                let joined = convertedValues.joined(separator: "→")
-                let rebuilt = "\(targetOrISF): \(joined)"
-                updatedReason.replaceSubrange(range, with: rebuilt)
-
-            } else if glucoseValueString.contains("Eventual BG"), glucoseValueString.contains("<") {
-                // Handle Eventual BG XX < target
-                let parts = glucoseValueString.components(separatedBy: "<")
-                if parts.count == 2 {
-                    let bgPart = parts[0].replacingOccurrences(of: "Eventual BG", with: "").trimmingCharacters(in: .whitespaces)
-                    let targetValue = parts[1].trimmingCharacters(in: .whitespaces)
-                    let formattedBGPart = convertToMmolL(bgPart)
-                    let formattedTargetValue = convertToMmolL(targetValue)
-                    let formattedString = "Eventual BG \(formattedBGPart)<\(formattedTargetValue)"
-                    updatedReason.replaceSubrange(range, with: formattedString)
-                }
-
-            } else if glucoseValueString.contains("<") {
-                // Handle minGuardBG (or minPredBG, etc.) x < y
-                let parts = glucoseValueString.components(separatedBy: "<")
-                if parts.count == 2 {
-                    let firstValue = parts[0].trimmingCharacters(in: .whitespaces)
-                    let secondValue = parts[1].trimmingCharacters(in: .whitespaces)
-                    let formattedFirstValue = convertToMmolL(firstValue)
-                    let formattedSecondValue = convertToMmolL(secondValue)
-                    let formattedString = "minGuardBG \(formattedFirstValue)<\(formattedSecondValue)"
-                    updatedReason.replaceSubrange(range, with: formattedString)
-                }
-
-            } else if glucoseValueString.contains(">=") {
-                // Handle "Eventual BG X >= Y"
-                let parts = glucoseValueString.components(separatedBy: " >= ")
-                if parts.count == 2 {
-                    let firstValue = parts[0].replacingOccurrences(of: "Eventual BG", with: "")
-                        .trimmingCharacters(in: .whitespaces)
-                    let secondValue = parts[1].trimmingCharacters(in: .whitespaces)
-                    let formattedFirstValue = convertToMmolL(firstValue)
-                    let formattedSecondValue = convertToMmolL(secondValue)
-                    let formattedString = "Eventual BG \(formattedFirstValue) >= \(formattedSecondValue)"
-                    updatedReason.replaceSubrange(range, with: formattedString)
-                }
-
-            } else if glucoseValueString.contains(">"), glucoseValueString.contains("BG") {
-                // Handle "maxDelta 37 > 20% of BG 95" style
-                let localPattern = "(\\d+) > (\\d+)% of BG (\\d+)"
-                let localRegex = try! NSRegularExpression(pattern: localPattern)
-                let localMatches = localRegex.matches(
-                    in: glucoseValueString,
-                    range: NSRange(glucoseValueString.startIndex..., in: glucoseValueString)
-                )
-                if let localMatch = localMatches.first, localMatch.numberOfRanges == 4 {
-                    let range1 = Range(localMatch.range(at: 1), in: glucoseValueString)!
-                    let range2 = Range(localMatch.range(at: 2), in: glucoseValueString)!
-                    let range3 = Range(localMatch.range(at: 3), in: glucoseValueString)!
-
-                    let firstValue = convertToMmolL(String(glucoseValueString[range1]))
-                    let thirdValue = convertToMmolL(String(glucoseValueString[range3]))
-
-                    let oldSnippet =
-                        "\(glucoseValueString[range1]) > \(glucoseValueString[range2])% of BG \(glucoseValueString[range3])"
-                    let newSnippet = "\(firstValue) > \(glucoseValueString[range2])% of BG \(thirdValue)"
-
-                    let replaced = glucoseValueString.replacingOccurrences(of: oldSnippet, with: newSnippet)
-                    updatedReason.replaceSubrange(range, with: replaced)
-                }
-
-            } else {
-                // Handle everything else, e.g., "minPredBG 39", "Dev: 5", etc.
-                let parts = glucoseValueString.components(separatedBy: .whitespaces)
-                if parts.count >= 2 {
-                    var metric = parts[0]
-                    let value = parts[1]
-
-                    // Add ":" to the metric only if it doesn't already end with ":"
-                    if !metric.hasSuffix(":") {
-                        metric += ":"
-                    }
-                    let formattedValue = convertToMmolL(value)
-                    let formattedString = "\(metric) \(formattedValue)"
-                    updatedReason.replaceSubrange(range, with: formattedString)
-                }
-            }
-        }
-
-        return updatedReason
+        UntetheredNightscout.reasonInMmolL(reason)
     }
 }
 

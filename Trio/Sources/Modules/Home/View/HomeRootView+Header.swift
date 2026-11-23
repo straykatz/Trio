@@ -109,15 +109,43 @@ extension Home.RootView {
     }
 
     var pumpView: some View {
-        PumpView(
-            reservoir: state.reservoir,
-            name: state.pumpName,
-            expiresAtDate: state.pumpExpiresAtDate,
-            activatedAtDate: state.pumpActivatedAtDate,
-            timerDate: state.timerDate,
-            pumpStatusHighlightMessage: state.pumpStatusHighlightMessage,
-            battery: state.batteryFromPersistence
-        )
+        UntetheredPumpGate(manager: resolver.resolve(UntetheredPhoneManager.self)!, now: state.timerDate) { display in
+            switch display {
+            case .phone:
+                PumpView(
+                    reservoir: state.reservoir,
+                    name: state.pumpName,
+                    expiresAtDate: state.pumpExpiresAtDate,
+                    activatedAtDate: state.pumpActivatedAtDate,
+                    timerDate: state.timerDate,
+                    pumpStatusHighlightMessage: state.pumpStatusHighlightMessage,
+                    battery: state.batteryFromPersistence
+                )
+            case let .watch(status):
+                PumpView(
+                    reservoir: status.reservoir,
+                    name: state.pumpName,
+                    expiresAtDate: status.expiresAt,
+                    activatedAtDate: nil,
+                    timerDate: state.timerDate,
+                    pumpStatusHighlightMessage: status.isSuspended
+                        ? "⚠️\n" + String(localized: "Insulin Suspended") + "\n⌚️"
+                        : nil,
+                    battery: [],
+                    onWatch: true
+                )
+            case .away:
+                PumpView(
+                    reservoir: nil,
+                    name: state.pumpName,
+                    expiresAtDate: nil,
+                    activatedAtDate: nil,
+                    timerDate: state.timerDate,
+                    pumpStatusHighlightMessage: "⌚️\n" + String(localized: "Pump on Apple Watch"),
+                    battery: []
+                )
+            }
+        }
         .onTapGesture {
             if state.pumpDisplayState == nil {
                 // shows user confirmation dialog with pump model choices, then proceeds to setup

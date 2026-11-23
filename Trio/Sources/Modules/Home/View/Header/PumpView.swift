@@ -9,6 +9,8 @@ struct PumpView: View {
     let timerDate: Date
     let pumpStatusHighlightMessage: String?
     let battery: [OpenAPS_Battery]
+    /// Untethered mode: the watch has the pod; shown for as long as it does.
+    var onWatch: Bool = false
     @Environment(\.colorScheme) var colorScheme
 
     let NORMAL_PATCH_AGE = TimeInterval.hours(80)
@@ -104,6 +106,20 @@ struct PumpView: View {
 
                 if let date = expiresAtDate {
                     PatchTimer(forDate: date)
+                }
+
+                if onWatch {
+                    HStack {
+                        Image(systemName: "applewatch")
+                            .font(.callout)
+                        Text("Apple Watch")
+                            .font(.callout).fontWeight(.bold).fontDesign(.rounded)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                    .foregroundStyle(.secondary)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Text("Pump on Apple Watch"))
                 }
             }
         }

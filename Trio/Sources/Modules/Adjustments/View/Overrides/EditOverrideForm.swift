@@ -15,6 +15,7 @@ struct EditOverrideForm: View {
     @State private var target: Decimal?
     @State private var advancedSettings: Bool
     @State private var smbIsOff: Bool
+    @State private var showUntetheredButton: Bool
     @State private var smbIsScheduledOff: Bool
     @State private var start: Decimal?
     @State private var end: Decimal?
@@ -47,6 +48,7 @@ struct EditOverrideForm: View {
         _target_override = State(initialValue: overrideToEdit.target != nil && overrideToEdit.target?.decimalValue != 0)
         _advancedSettings = State(initialValue: overrideToEdit.advancedSettings)
         _smbIsOff = State(initialValue: overrideToEdit.smbIsOff)
+        _showUntetheredButton = State(initialValue: overrideToEdit.showUntetheredButton)
         _smbIsScheduledOff = State(initialValue: overrideToEdit.smbIsScheduledOff)
         _start = State(initialValue: overrideToEdit.start?.decimalValue)
         _end = State(initialValue: overrideToEdit.end?.decimalValue)
@@ -253,6 +255,16 @@ struct EditOverrideForm: View {
                         }
                     }
                 }
+            }
+            .listRowBackground(Color.chart)
+
+            Section {
+                Toggle("Show Watch Mode Button", isOn: $showUntetheredButton)
+                    .onChange(of: showUntetheredButton) { hasChanges = true }
+            } footer: {
+                Text(
+                    "While this override runs, a watch button next to its cancel button hands the loop to the Apple Watch. Watch mode ends with the override."
+                )
             }
             .listRowBackground(Color.chart)
 
@@ -595,6 +607,7 @@ struct EditOverrideForm: View {
         override.target = target_override ? NSDecimalNumber(decimal: target ?? 100) : nil
         override.advancedSettings = advancedSettings
         override.smbIsOff = smbIsOff
+        override.showUntetheredButton = showUntetheredButton
         override.smbIsScheduledOff = smbIsScheduledOff
         override.start = start.map { NSDecimalNumber(decimal: $0) }
         override.end = end.map { NSDecimalNumber(decimal: $0) }
@@ -614,6 +627,7 @@ struct EditOverrideForm: View {
         target = override.target?.decimalValue
         advancedSettings = override.advancedSettings
         smbIsOff = override.smbIsOff
+        showUntetheredButton = override.showUntetheredButton
         smbIsScheduledOff = override.smbIsScheduledOff
         start = override.start?.decimalValue
         end = override.end?.decimalValue

@@ -7,6 +7,10 @@ import WatchKit
 struct BolusInputView: View {
     @Binding var navigationPath: NavigationPath
     @State private var bolusAmount = 0.0
+    /// The phone's Reduced Bolus and Super Bolus for this meal, when the phone has the option on; one at a time.
+    @State private var reducedBolus = false
+    @State private var superBolus = false
+    @State private var showsReminderPicker = false
 
     let state: WatchState
 
@@ -110,7 +114,54 @@ struct BolusInputView: View {
                     Text("Insulin")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
-                        .padding(.bottom)
+                        .padding(.bottom, showsOptions ? 2 : nil)
+
+                    if showsOptions {
+                        HStack(spacing: 5) {
+                            if state.offersReducedBolus {
+                                optionButton(String(localized: "Reduced", comment: "Reduced bolus option on the watch"), isOn: reducedBolus) {
+                                    reducedBolus.toggle()
+                                    if reducedBolus { superBolus = false }
+                                    state.requestBolusRecommendation(reducedBolus: reducedBolus, superBolus: superBolus)
+                                }
+                            }
+                            if state.offersSuperBolus {
+                                optionButton(String(localized: "Super", comment: "Super bolus option on the watch"), isOn: superBolus) {
+                                    superBolus.toggle()
+                                    if superBolus { reducedBolus = false }
+                                    state.requestBolusRecommendation(reducedBolus: reducedBolus, superBolus: superBolus)
+                                }
+                            }
+                            if offersReminder {
+                                // Remind Me to Eat: the phone's presets to choose from, or none
+                                optionButton(reminderLabel, isOn: state.mealTimeReminderMinutes > 0) {
+                                    showsReminderPicker = true
+                                }
+                                .accessibilityLabel(String(localized: "Remind Me to Eat", comment: "Meal-time reminder on the watch"))
+                                .confirmationDialog(
+                                    String(localized: "Remind Me to Eat", comment: "Meal-time reminder on the watch"),
+                                    isPresented: $showsReminderPicker,
+                                    titleVisibility: .visible
+                                ) {
+                                    ForEach(state.mealTimeReminderPresets.filter { $0 > 0 }.sorted(), id: \.self) { minutes in
+                                        Button(
+                                            (minutes == state.mealTimeReminderMinutes ? "✓ " : "")
+                                                + String(localized: "In \(minutes) min", comment: "Meal-time reminder preset on the watch")
+                                        ) {
+                                            state.mealTimeReminderMinutes = minutes
+                                        }
+                                    }
+                                    Button(
+                                        (state.mealTimeReminderMinutes == 0 ? "✓ " : "")
+                                            + String(localized: "No Reminder", comment: "Meal-time reminder off on the watch")
+                                    ) {
+                                        state.mealTimeReminderMinutes = 0
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.bottom, 4)
+                    }
 
                     Spacer()
 
@@ -122,7 +173,7 @@ struct BolusInputView: View {
 
                     Button(actionButtonLabel) {
                         if isCarbsOnly {
-                            state.sendCarbsEntry(state.carbsAmount)
+                            state.sendCarbsEntry(state.carbsAmount, remindAfter: offersReminder ? state.mealTimeReminderMinutes : 0)
                             navigationPath.append(NavigationDestinations.acknowledgmentPending)
                         } else {
                             state.bolusAmount = min(bolusAmount, effectiveBolusLimit)
@@ -162,7 +213,9 @@ struct BolusInputView: View {
             // Set initial bolus amount to recommended value
             // Only do this if user has not updated amount previously, e.g., when navigating to next and then back to this view
             if bolusAmount == 0 {
-                state.requestBolusRecommendation()
+                // a new meal: its reminder starts off, as on the phone
+                state.mealTimeReminderMinutes = 0
+                state.requestBolusRecommendation(reducedBolus: reducedBolus, superBolus: superBolus)
                 bolusAmount = Double(truncating: NSDecimalNumber(decimal: state.recommendedBolus))
             }
         }
@@ -173,5 +226,32 @@ struct BolusInputView: View {
                 bolusAmount = Double(truncating: NSDecimalNumber(decimal: newValue))
             }
         }
+    }
+
+    /// The meal-time reminder, with carbs entered and the reminder on on the phone.
+    private var offersReminder: Bool {
+        state.mealTimeReminderEnabled && state.carbsAmount > 0 && state.mealTimeReminderPresets.contains { $0 > 0 }
+    }
+
+    private var showsOptions: Bool { state.offersReducedBolus || state.offersSuperBolus || offersReminder }
+
+    private var reminderLabel: String {
+        let minutes = state.mealTimeReminderMinutes
+        return minutes > 0 ? "⏰ \(minutes)′" : "⏰"
+    }
+
+    /// A reduced or super bolus, on or off: the recommendation follows.
+    private func optionButton(_ title: String, isOn: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption2)
+                .fontWeight(isOn ? .semibold : .regular)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(isOn ? Color.insulin : Color.gray.opacity(0.3)))
+                .foregroundStyle(isOn ? Color.white : Color.primary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }

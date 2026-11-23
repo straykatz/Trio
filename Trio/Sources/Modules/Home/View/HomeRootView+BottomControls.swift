@@ -324,6 +324,14 @@ extension Home.RootView {
         .frame(height: 4)
     }
 
+    @ViewBuilder func untetheredOverrideButton() -> some View {
+        if let override = latestOverride.first, override.showUntetheredButton,
+           let manager = resolver.resolve(UntetheredPhoneManager.self), manager.isEnabled || manager.isWatchInCharge
+        {
+            UntetheredOverrideButton(manager: manager, overrideID: override.id)
+        }
+    }
+
     @ViewBuilder func adjustmentView() -> some View {
         let tint = adjustmentTint
         // concurrent override + temp target: halved tint, one remaining bar per half
@@ -354,6 +362,8 @@ extension Home.RootView {
 
                             Spacer(minLength: 0)
 
+                            untetheredOverrideButton()
+
                             adjustmentsCancelView({
                                 if !latestTempTarget.isEmpty, !latestOverride.isEmpty {
                                     showCancelConfirmDialog = true
@@ -369,6 +379,7 @@ extension Home.RootView {
                 } else if let overrideString = overrideString {
                     adjustmentsOverrideView(overrideString)
                     Spacer()
+                    untetheredOverrideButton()
                     adjustmentsCancelOverrideView()
 
                 } else if let tempTargetString = tempTargetString {
@@ -517,6 +528,58 @@ extension Home.RootView {
         }
     }
 
+    /// In-app mirror of the meal-time reminder alarm: a live countdown until the user can eat, with the
+    /// meal summary and a cancel button.
+    @ViewBuilder func mealTimeReminderCountdownView(_ reminder: PendingMealTimeReminder) -> some View {
+        // Empty when neither half is present, matching the reminder body's wording; then only the
+        // countdown is shown.
+        let summary = MealTimeReminderSummary.compact(
+            carbs: NSDecimalNumber(decimal: reminder.carbs).doubleValue,
+            bolusAmount: NSDecimalNumber(decimal: reminder.bolusAmount).doubleValue
+        )
+        let mealSummary: String? = summary.isEmpty ? nil : summary
+
+        HStack {
+            Image(systemName: "fork.knife")
+                .font(.system(size: 25))
+                .accessibilityHidden(true)
+
+            Spacer()
+
+            VStack {
+                Text("Meal-Time Reminder")
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let mealSummary {
+                    Text(mealSummary)
+                        .font(.caption)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }.padding(.leading, 5)
+
+            Spacer()
+
+            // `max` keeps the range valid if this renders after the fire date but before expiry clears it.
+            Text(timerInterval: Date.now ... max(Date.now, reminder.fireDate), countsDown: true)
+                .font(.title3.monospacedDigit())
+                .foregroundStyle(.orange)
+                .accessibilityLabel(Text("Time until you can eat"))
+
+            Button {
+                state.cancelMealTimeReminder()
+            } label: {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 25))
+            }
+            .accessibilityLabel(Text("Stop meal-time reminder"))
+        }
+        .padding(.horizontal, 10)
+        .padding(.trailing, 8)
+        .frame(height: HomeLayout.statsBannerHeight)
+        .glassPanel(tint: .orange, tintOpacity: 0.18, strokeOpacity: 0.30)
+        .padding(.horizontal, 10)
+    }
+
     func statsDistributionBar(_ segments: [(color: Color, fraction: CGFloat)]) -> some View {
         GeometryReader { g in
             let spacing: CGFloat = 2
@@ -640,15 +703,17 @@ extension Home.RootView {
         .buttonStyle(.plain)
     }
 
-    var multiUsePanelState: MultiUsePanelState {
+    func multiUsePanelState(untetheredAuditFinding: String?) -> MultiUsePanelState {
         MultiUsePanelState.resolve(
             notificationsDisabled: notificationsDisabled,
             pumpTimeMismatch: state.pumpStatusBadgeImage != nil,
             lastGlucoseDate: state.glucoseFromPersistence.last?.date,
             maxIOB: state.maxIOB,
+            pendingMealTimeReminder: state.pendingMealTimeReminder,
             tidepoolLoginRequired: state.tidepoolLoginRequired,
             hasUnacknowledgedReleaseNotes: releaseNotesService.hasUnacknowledgedNotes,
             dosingMode: state.dosingMode,
+            untetheredAuditFinding: untetheredAuditFinding,
             now: state.timerDate
         )
     }
@@ -663,6 +728,7 @@ extension Home.RootView {
         tintOpacity: Double? = nil,
         strokeOpacity: Double? = nil,
         strokeWidth: CGFloat? = nil,
+        showsChevron: Bool = true,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -681,9 +747,11 @@ extension Home.RootView {
 
                     Spacer(minLength: 8)
 
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                    if showsChevron {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .padding(.horizontal, 16)
             }
@@ -701,8 +769,8 @@ extension Home.RootView {
     }
 
     /// One slot, highest-priority state wins; stats is the default face.
-    @ViewBuilder func multiUsePanel() -> some View {
-        switch multiUsePanelState {
+    @ViewBuilder func multiUsePanel(untetheredAuditFinding: String?) -> some View {
+        switch multiUsePanelState(untetheredAuditFinding: untetheredAuditFinding) {
         case .notificationsDisabled:
             panelBanner(
                 systemImage: "bell.slash.fill",
@@ -732,6 +800,22 @@ extension Home.RootView {
                 tint: .orange
             ) {
                 showManualGlucose = true
+            }
+        case let .untetheredAudit(finding):
+            panelBanner(
+                systemImage: "applewatch.slash",
+                title: String(localized: "Insulin Check After Watch Mode"),
+                subtitle: String(localized: "Pump and records differ. Tap for details."),
+                tint: .orange
+            ) {
+                showUntetheredAuditFinding = true
+            }
+            .alert(String(localized: "Insulin Check After Watch Mode"), isPresented: $showUntetheredAuditFinding) {
+                Button(String(localized: "OK"), role: .cancel) {
+                    resolver.resolve(UntetheredPhoneManager.self)?.acknowledgeAuditFinding()
+                }
+            } message: {
+                Text(finding)
             }
         case .maxIOBZero:
             panelBanner(
@@ -775,6 +859,8 @@ extension Home.RootView {
             ) {
                 openDosingModeSetting()
             }
+        case let .mealTimeReminderCountdown(reminder):
+            mealTimeReminderCountdownView(reminder)
         case .stats:
             statsBanner()
         }
@@ -812,8 +898,19 @@ extension Home.RootView {
             .frame(height: HomeLayout.bottomPanelHeight)
             .animation(.easeInOut(duration: 0.2), value: state.bolusProgress != nil)
 
-            multiUsePanel()
-                .frame(height: HomeLayout.statsBannerHeight)
+            UntetheredBannerSlot(manager: resolver.resolve(UntetheredPhoneManager.self)!) { auditFinding in
+                multiUsePanel(untetheredAuditFinding: auditFinding)
+            } banner: { title, subtitle, isTappable, action in
+                panelBanner(
+                    systemImage: "applewatch.radiowaves.left.and.right",
+                    title: title,
+                    subtitle: subtitle,
+                    tint: .untethered,
+                    showsChevron: isTappable,
+                    action: action
+                )
+            }
+            .frame(height: HomeLayout.statsBannerHeight)
         }
         .padding(.vertical, HomeLayout.bottomZonePadding)
     }

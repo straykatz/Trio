@@ -1,7 +1,7 @@
 [submodule "LoopKit"]
 	path = LoopKit
-	url = https://github.com/loopandlearn/LoopKit.git
-	branch = trio-next-dev
+	url = https://github.com/kristinkand/LoopKit.git
+	branch = untethered-next-dev
 [submodule "CGMBLEKit"]
 	path = CGMBLEKit
 	url = https://github.com/loopandlearn/CGMBLEKit.git
@@ -16,8 +16,8 @@
 	branch = trio-next-dev
 [submodule "G7SensorKit"]
 	path = G7SensorKit
-	url = https://github.com/loopandlearn/G7SensorKit.git
-	branch = trio-next-dev
+	url = https://github.com/kristinkand/G7SensorKit.git
+	branch = untethered-personal
 [submodule "MinimedKit"]
 	path = MinimedKit
 	url = https://github.com/loopandlearn/MinimedKit.git
@@ -40,8 +40,8 @@
 	branch = trio-next-dev
 [submodule "OmnipodKit"]
 	path = OmnipodKit
-	url = https://github.com/loopandlearn/OmnipodKit
-	branch = next-dev
+	url = https://github.com/kristinkand/OmnipodKit.git
+	branch = untethered-personal
 [submodule "AccuChekKit"]
 	path = AccuChekKit
 	url = https://github.com/loopandlearn/AccuChekKit

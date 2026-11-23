@@ -35,6 +35,7 @@ extension Home {
         @State var showSnoozeSheet: Bool = false
         @State var showManualGlucose: Bool = false
         @State var showReleaseNotes: Bool = false
+        @State var showUntetheredAuditFinding: Bool = false
         @ObservedObject var releaseNotesService = ReleaseNotesService.shared
         // Pull-down-to-force-loop (see HomeRootView+Refresh.swift)
         @State var pullOffset: CGFloat = 0
@@ -227,7 +228,13 @@ extension Home {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 bottomControls()
             }
-            .background(appState.trioBackgroundColor(for: colorScheme))
+            .background {
+                ZStack {
+                    appState.trioBackgroundColor(for: colorScheme)
+                    UntetheredHomeTint(manager: resolver.resolve(UntetheredPhoneManager.self)!)
+                }
+                .ignoresSafeArea()
+            }
             .onReceive(
                 resolver.resolve(AlertPermissionsChecker.self)!.$notificationsDisabled,
                 perform: {

@@ -15,6 +15,8 @@ struct WatchLogEntry: Codable, Sendable, Equatable {
         case bolus
         case treatments
         case lifecycle
+        /// Untethered mode and the watch's own G7 reader.
+        case untethered
 
         var name: String {
             rawValue.prefix(1).uppercased() + rawValue.dropFirst()

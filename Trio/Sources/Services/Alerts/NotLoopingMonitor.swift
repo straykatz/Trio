@@ -60,6 +60,11 @@ final class NotLoopingMonitor: Injectable {
         injectServices(resolver)
         subscribe(to: apsManager.lastLoopDateSubject.eraseToAnyPublisher())
         broadcaster.register(SnoozeObserver.self, observer: self)
+        // the untethered watch loops and alarms itself; the phone's schedule restarts with its next loop
+        Foundation.NotificationCenter.default.publisher(for: .untetheredSessionDidChange)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.rescheduleAlarm() }
+            .store(in: &subscriptions)
     }
 
     /// Publisher-only seam for tests: assigns the alert manager directly and
@@ -92,7 +97,8 @@ final class NotLoopingMonitor: Injectable {
         // Looping" alarm would just be noise. nil injection (publisher-only
         // test seam) passes so the existing tests still exercise the
         // retract/reschedule plumbing.
-        guard settingsManager?.settings.dosingMode.automation != AutomationLevel.off,
+        guard UntetheredGate.state.session.isIdle,
+              settingsManager?.settings.dosingMode.automation != AutomationLevel.off,
               apsManager?.isManualTempBasal != true,
               apsManager?.isSuspended != true
         else { return }

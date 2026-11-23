@@ -459,6 +459,47 @@ import Testing
         #expect(events.first?.isMutable == true)
     }
 
+    @Test("Doses the watch still runs survive the phone's pending report") func testWatchPendingDosesSurvivePurge() async throws {
+        let start = Date().addingTimeInterval(-20.minutes.timeInterval)
+        // an epoch no real session uses, removed again whatever the outcome
+        let epoch = -1
+        let held = storedIdentifier("tbr-watch")
+        UntetheredGate.update { $0.watchPendingDoses[epoch] = [held] }
+        defer { UntetheredGate.update { $0.watchPendingDoses[epoch] = nil } }
+
+        // the watch's zero temp, still running when it handed the pump back
+        try await storage.storePumpEvents(
+            [tempBasalEvent(
+                start: start,
+                end: start.addingTimeInterval(120.minutes.timeInterval),
+                rate: 0,
+                syncIdentifier: "tbr-watch",
+                isMutable: true
+            )],
+            replacePendingEvents: false
+        )
+        // and one of the phone's own that it no longer reports
+        try await storage.storePumpEvents(
+            [tempBasalEvent(
+                start: start.addingTimeInterval(-30.minutes.timeInterval),
+                end: start,
+                rate: 1.0,
+                syncIdentifier: "tbr-phone-orphan",
+                isMutable: true
+            )],
+            replacePendingEvents: false
+        )
+        // the phone's pump manager, back in control, reports what it knows
+        try await storage.storePumpEvents(
+            [bolusEvent(date: Date(), units: 0.5, deliveredUnits: 0.5, syncIdentifier: "bolus-phone", isMutable: false)],
+            replacePendingEvents: true
+        )
+
+        let identifiers = try await fetchAllEvents().compactMap(\.syncIdentifier)
+        #expect(identifiers.contains(storedIdentifier("tbr-watch")), "The watch's running dose is not the phone's to withdraw")
+        #expect(!identifiers.contains(storedIdentifier("tbr-phone-orphan")), "The phone's own orphan is still purged")
+    }
+
     // MARK: - Identity edge cases
 
     @Test("Same-timestamp bolus and temp basal don't shadow each other") func testSameTimestampBolusAndTempBasal() async throws {

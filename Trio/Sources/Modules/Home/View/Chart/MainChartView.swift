@@ -959,6 +959,12 @@ extension MainChartCanvas {
                     .asMmolL
             )
 
+            // at the target, as an override without a target of its own
+            UntetheredSpansView(
+                y: state.units == .mgdL ? state.currentGlucoseTarget : state.currentGlucoseTarget.asMmolL,
+                now: state.timerDate
+            )
+
             ForecastView(
                 preprocessedData: state.preprocessedData,
                 minForecast: state.minForecast,

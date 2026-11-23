@@ -13,6 +13,9 @@ final class CarbPresetIntentRequest: BaseIntentsRequest {
         guard quantityCarbs >= 0 || quantityFat >= 0 || quantityProtein >= 0 else {
             return "Amount must be positive."
         }
+        guard UntetheredGate.state.session.isIdle else {
+            return String(localized: "The Apple Watch is running the loop. Enter carbs on the watch.")
+        }
 
         try await carbsStorage.storeCarbs(
             [CarbsEntry(

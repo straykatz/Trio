@@ -26,6 +26,7 @@ extension Adjustments {
         var currentGlucoseTarget: Decimal = 100
         var shouldOverrideTarget: Bool = false
         var smbIsOff: Bool = false
+        var showUntetheredButton: Bool = false
         var id = ""
         var overrideName: String = ""
         var isPreset: Bool = false

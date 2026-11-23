@@ -16,6 +16,8 @@ protocol FetchGlucoseManager: SourceInfoProvider {
     /// state; see `CGMSensorStateLog`. Call on every reading.
     func reportCGMSensorObservation(_ observation: CGMSensorObservation)
     func startCGMSensorSession(startedAt: Date)
+    /// Recomputes `smoothedGlucose` for the last day's readings.
+    func exponentialSmoothingGlucose(context: NSManagedObjectContext) async
     var glucoseSource: GlucoseSource? { get }
     var cgmManager: CGMManagerUI? { get }
     var cgmGlucoseSourceType: CGMType { get set }
@@ -301,7 +303,7 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
 
     private func glucoseStoreAndHeartDecision(syncDate: Date, glucose: [BloodGlucose]) async throws {
         // calibration add if required only for sensor
-        let newGlucose = overcalibrate(entries: glucose.filter { $0.sgv != nil })
+        var newGlucose = overcalibrate(entries: glucose.filter { $0.sgv != nil })
 
         var filteredByDate: [BloodGlucose] = []
         var filtered: [BloodGlucose] = []
@@ -317,6 +319,15 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
             try await glucoseStorage.storeGlucose(calibrations)
         }
 
+        guard newGlucose.isNotEmpty else {
+            endBackgroundTaskSafely(&backgroundTaskID, taskName: "Glucose Store and Heartbeat Decision")
+            return
+        }
+        // before the filters: a reading the watch already sent is left out as stored, but the phone read it too
+        PhoneOwnGlucose.noteReading(newGlucose)
+
+        // a new sensor's readings from while the old one was still read stay out of the history
+        newGlucose = CGMSensorHandover.dropOverlap(newGlucose, lastStored: syncDate)
         guard newGlucose.isNotEmpty else {
             endBackgroundTaskSafely(&backgroundTaskID, taskName: "Glucose Store and Heartbeat Decision")
             return
@@ -499,18 +510,10 @@ extension BaseFetchGlucoseManager {
 
                 guard !glucoseReadings.isEmpty else { return }
 
-                // Static method call to avoid self-capture
-                Self.applyExponentialSmoothingAndStore(
-                    glucoseReadings: glucoseReadings,
-                    minimumWindowSize: 4,
-                    maximumAllowedGapMinutes: 12,
-                    xDripErrorGlucose: 38,
-                    minimumSmoothedGlucose: 39,
-                    firstOrderWeight: 0.4,
-                    firstOrderAlpha: 0.5,
-                    secondOrderAlpha: 0.4,
-                    secondOrderBeta: 1.0
-                )
+                let smoothed = GlucoseSmoothing.smoothed(glucoseReadings.map { (date: $0.date, glucose: Int($0.glucose)) })
+                for (object, value) in zip(glucoseReadings, smoothed) {
+                    if let value { object.smoothedGlucose = value as NSDecimalNumber }
+                }
 
                 try context.save()
             }
@@ -521,122 +524,71 @@ extension BaseFetchGlucoseManager {
             warning(.cgm, "Glucose smoothing failed", error: error)
         }
     }
+}
 
-    private static func applyExponentialSmoothingAndStore(
-        glucoseReadings data: [GlucoseStored],
-        minimumWindowSize: Int,
-        maximumAllowedGapMinutes: Int,
-        xDripErrorGlucose: Int,
-        minimumSmoothedGlucose: Decimal,
-        firstOrderWeight: Decimal,
-        firstOrderAlpha: Decimal,
-        secondOrderAlpha: Decimal,
-        secondOrderBeta: Decimal
-    ) {
-        guard !data.isEmpty else { return }
+/// The newest reading the phone's own CGM delivered. The phone's watch state also carries the readings it stored
+/// from the watch, so the newest one there may be the watch's own: with the phone's Bluetooth off, its state kept
+/// sending the watch's readings back, and the watch took that for the phone being back (30 October, 16:34 to 16:57).
+enum PhoneOwnGlucose {
+    private static let key = "untethered.phoneOwnGlucoseDate"
+    private static let valueKey = "untethered.phoneOwnGlucoseMgdl"
+    private static let directionKey = "untethered.phoneOwnGlucoseDirection"
 
-        // Determine the size of the valid most-recent smoothing window.
-        // We walk adjacent pairs from newest -> oldest to preserve the same window semantics
-        // as the original implementation, but avoid manual reverse indexing.
-        var validWindowCount = max(data.count - 1, 0)
+    static var newest: Date? {
+        UserDefaults.standard.object(forKey: key) as? Date
+    }
 
-        for (recentOffset, pair) in zip(data.dropFirst().reversed(), data.dropLast().reversed()).enumerated() {
-            let (newer, older) = pair
+    /// The newest reading's value and direction, sent with its date: a watch session whose own sensor link failed
+    /// loops on it instead of handing the pump back (5 November, 02:53 to 03:18: the phone read every 5 minutes,
+    /// the watch nothing).
+    static var newestReading: (mgdl: Int, direction: String)? {
+        let defaults = UserDefaults.standard
+        guard let mgdl = defaults.object(forKey: valueKey) as? Int, mgdl > 0 else { return nil }
+        return (mgdl, defaults.string(forKey: directionKey) ?? "")
+    }
 
-            guard let newerDate = newer.date, let olderDate = older.date else { continue }
+    static func noteReading(_ readings: [BloodGlucose]) {
+        guard let reading = readings.max(by: { $0.dateString < $1.dateString }),
+              reading.dateString > (newest ?? .distantPast)
+        else { return }
+        let defaults = UserDefaults.standard
+        defaults.set(reading.dateString, forKey: key)
+        defaults.set(reading.glucose ?? reading.sgv ?? 0, forKey: valueKey)
+        defaults.set(reading.direction?.rawValue ?? "", forKey: directionKey)
+    }
+}
 
-            let gapSeconds = newerDate.timeIntervalSince(olderDate)
-            let gapMinutesRounded = Int((gapSeconds / 60.0).rounded())
+/// A new sensor hands over readings from before it was paired, the G7 up to 24 hours of them. Where the old sensor was
+/// still being read then, the two get mixed: on 6 November (second tester) the new sensor had run since 17:56 and was
+/// paired at 01:03, and its readings went into every gap of the old one's, 2 to 3.5 mmol/L higher (22:19 to 22:44,
+/// 00:04, 00:44 to 00:59). Its readings now count only from after the old sensor's last reading; into a true gap,
+/// where the old sensor had ended before, they still go.
+enum CGMSensorHandover {
+    private static let sensorKey = "trio.cgmHandover.sensor"
+    private static let cutoffKey = "trio.cgmHandover.cutoff"
 
-            if gapMinutesRounded >= maximumAllowedGapMinutes {
-                validWindowCount = recentOffset + 1 // include the more recent reading
-                break
-            }
+    /// The latest reading the old sensor gave besides the stored ones (an unreliable one, say).
+    static var latestOtherReading: () -> Date? = { nil }
 
-            // Ported from AAPS: 38 mg/dL may represent an xDrip error state.
-            if Int(newer.glucose) == xDripErrorGlucose {
-                validWindowCount = recentOffset // exclude this 38 value
-                break
-            }
+    static func dropOverlap(_ glucose: [BloodGlucose], lastStored: Date) -> [BloodGlucose] {
+        guard let sensor = glucose.compactMap(\.transmitterID).first(where: { !$0.isEmpty }) else { return glucose }
+        let defaults = UserDefaults.standard
+        if let known = defaults.string(forKey: sensorKey), known != sensor {
+            // the first readings of a new sensor: what Trio has so far is the old sensor's
+            let lastOld = max(lastStored, latestOtherReading() ?? .distantPast)
+            defaults.set(lastOld, forKey: cutoffKey)
+            info(.cgm, "New sensor: its readings count from after the old sensor's last reading at \(lastOld)")
         }
+        defaults.set(sensor, forKey: sensorKey)
 
-        // Not enough recent contiguous readings to smooth (e.g. after CGM gap).
-        // IMPORTANT: Only apply fallback to the recent window, not all data.
-        // Otherwise a recent gap would overwrite historical smoothed values.
-        guard validWindowCount >= minimumWindowSize else {
-            let recentWindow = data.suffix(validWindowCount)
-
-            for object in recentWindow {
-                let raw = Decimal(Int(object.glucose))
-                object.smoothedGlucose = max(raw, minimumSmoothedGlucose) as NSDecimalNumber
-            }
-
-            return
+        guard let cutoff = defaults.object(forKey: cutoffKey) as? Date else { return glucose }
+        let kept = glucose.filter { $0.transmitterID != sensor || $0.dateString > cutoff }
+        if kept.count < glucose.count {
+            debug(
+                .cgm,
+                "Left out \(glucose.count - kept.count) readings of the new sensor from while the old one was still read (until \(cutoff))"
+            )
         }
-
-        // Restrict smoothing to the valid most-recent window, still in chronological order.
-        let validWindow = data.suffix(validWindowCount)
-
-        guard let oldest = validWindow.first else { return }
-
-        // ---- 1st order smoothing ----
-        var firstOrderSmoothed: [Decimal] = []
-        firstOrderSmoothed.reserveCapacity(validWindow.count)
-
-        var firstOrderCurrent = Decimal(Int(oldest.glucose))
-        firstOrderSmoothed.append(firstOrderCurrent)
-
-        for sample in validWindow.dropFirst() {
-            let raw = Decimal(Int(sample.glucose))
-            firstOrderCurrent = firstOrderCurrent + firstOrderAlpha * (raw - firstOrderCurrent)
-            firstOrderSmoothed.append(firstOrderCurrent)
-        }
-
-        // ---- 2nd order smoothing ----
-        let secondOrderInput = Array(validWindow)
-        guard secondOrderInput.count >= 2 else { return }
-
-        var secondOrderSmoothed: [Decimal] = []
-        secondOrderSmoothed.reserveCapacity(secondOrderInput.count)
-
-        var secondOrderDeltas: [Decimal] = []
-        secondOrderDeltas.reserveCapacity(secondOrderInput.count)
-
-        var previousSecondOrderSmoothed = Decimal(Int(secondOrderInput[0].glucose))
-        var previousSecondOrderDelta =
-            Decimal(Int(secondOrderInput[1].glucose) - Int(secondOrderInput[0].glucose))
-
-        secondOrderSmoothed.append(previousSecondOrderSmoothed)
-        secondOrderDeltas.append(previousSecondOrderDelta)
-
-        for sample in secondOrderInput.dropFirst() {
-            let raw = Decimal(Int(sample.glucose))
-
-            let nextSmoothed =
-                secondOrderAlpha * raw
-                    + (1 - secondOrderAlpha) * (previousSecondOrderSmoothed + previousSecondOrderDelta)
-
-            let nextDelta =
-                secondOrderBeta * (nextSmoothed - previousSecondOrderSmoothed)
-                    + (1 - secondOrderBeta) * previousSecondOrderDelta
-
-            previousSecondOrderSmoothed = nextSmoothed
-            previousSecondOrderDelta = nextDelta
-
-            secondOrderSmoothed.append(nextSmoothed)
-            secondOrderDeltas.append(nextDelta)
-        }
-
-        // ---- Weighted blend ----
-        let blended = zip(firstOrderSmoothed, secondOrderSmoothed).map { firstOrder, secondOrder in
-            firstOrderWeight * firstOrder + (1 - firstOrderWeight) * secondOrder
-        }
-
-        // Apply to the most recent valid-window readings.
-        for (object, blendedValue) in zip(validWindow, blended) {
-            let rounded = blendedValue.rounded(toPlaces: 0) // nearest integer, ties away from zero
-            let clamped = max(rounded, minimumSmoothedGlucose)
-            object.smoothedGlucose = clamped as NSDecimalNumber
-        }
+        return kept
     }
 }

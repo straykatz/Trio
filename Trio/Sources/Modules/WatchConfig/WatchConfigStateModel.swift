@@ -10,6 +10,14 @@ extension WatchConfig {
         @Published var devices: [IQDevice] = []
         @Published var confirmBolusFaster = false
         @Published var showForecastWatch = false
+        @Published var allowUntetheredStartWithoutPhoneWatch = false
+        @Published var fallbackLoopWatch = false
+        @Published var untetheredWorkoutWatch = false
+        @Published var watchGlanceLayout: WatchGlanceLayout = .standard
+        @Published var watchGlanceEnabled = true
+        @Published var untetheredModeWatch = true
+        @Published var nightscoutUploadWatch = false
+        @Published var untetheredTintHomeWatch = true
 
         /// Garmin watch settings containing all watch-related configuration
         @Published var garminSettings = GarminWatchSettings()
@@ -24,6 +32,16 @@ extension WatchConfig {
             subscribeSetting(\.garminSettings, on: $garminSettings) { garminSettings = $0 }
             subscribeSetting(\.confirmBolusFaster, on: $confirmBolusFaster) { confirmBolusFaster = $0 }
             subscribeSetting(\.showForecastWatch, on: $showForecastWatch) { showForecastWatch = $0 }
+            subscribeSetting(\.allowUntetheredStartWithoutPhoneWatch, on: $allowUntetheredStartWithoutPhoneWatch) {
+                allowUntetheredStartWithoutPhoneWatch = $0
+            }
+            subscribeSetting(\.fallbackLoopWatch, on: $fallbackLoopWatch) { fallbackLoopWatch = $0 }
+            subscribeSetting(\.untetheredWorkoutWatch, on: $untetheredWorkoutWatch) { untetheredWorkoutWatch = $0 }
+            subscribeSetting(\.watchGlanceLayout, on: $watchGlanceLayout) { watchGlanceLayout = $0 }
+            subscribeSetting(\.watchGlanceEnabled, on: $watchGlanceEnabled) { watchGlanceEnabled = $0 }
+            subscribeSetting(\.untetheredModeWatch, on: $untetheredModeWatch) { untetheredModeWatch = $0 }
+            subscribeSetting(\.nightscoutUploadWatch, on: $nightscoutUploadWatch) { nightscoutUploadWatch = $0 }
+            subscribeSetting(\.untetheredTintHomeWatch, on: $untetheredTintHomeWatch) { untetheredTintHomeWatch = $0 }
 
             devices = garmin.devices
         }

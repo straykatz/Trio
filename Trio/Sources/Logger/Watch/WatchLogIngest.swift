@@ -112,7 +112,7 @@ final class WatchLogIngest: @unchecked Sendable {
     func requestLatest(timeout: Duration = requestTimeout) async {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
-        guard session.activationState == .activated, session.isPaired, session.isWatchAppInstalled else { return }
+        guard session.activationState == .activated, session.isPaired, WatchAppPresence.isInstalled(session) else { return }
         let before = ingestedBatches.withLock { $0 }
         Self.send([WatchLogTransfer.request: true])
         guard session.isReachable else { return }
@@ -156,6 +156,31 @@ final class WatchLogIngest: @unchecked Sendable {
         formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
         return formatter
     }()
+
+    private static let legacyIDsKey = "WatchLogIngest.legacyIDs"
+    private static let legacyIDsLock = OSAllocatedUnfairLock()
+
+    /// Files a part of the plain watch log (`watchLogs`) once and returns its id (`watchLogsID`) for the watch's
+    /// confirmation, or nil for a payload without one. The watch keeps a part until it has that confirmation and
+    /// sends it again when a confirmation was lost, so a part that comes twice is confirmed but not filed again.
+    @discardableResult static func acceptLegacy(_ payload: [String: Any], receivedAt date: Date = Date()) -> String? {
+        guard let logs = payload["watchLogs"] as? String else { return nil }
+        guard let id = payload["watchLogsID"] as? String, !id.isEmpty else {
+            legacyRecords(from: logs, receivedAt: date).forEach(TrioLogger.sink.accept)
+            return nil
+        }
+        let isNew = legacyIDsLock.withLock { () -> Bool in
+            var ids = UserDefaults.standard.stringArray(forKey: legacyIDsKey) ?? []
+            guard !ids.contains(id) else { return false }
+            ids.append(id)
+            UserDefaults.standard.set(Array(ids.suffix(400)), forKey: legacyIDsKey)
+            return true
+        }
+        if isNew {
+            legacyRecords(from: logs, receivedAt: date).forEach(TrioLogger.sink.accept)
+        }
+        return id
+    }
 
     // String payloads from watch builds before structured logging
     static func legacyRecords(from payload: String, receivedAt date: Date = Date()) -> [LogRecord] {

@@ -65,24 +65,53 @@ enum AdjustmentError: LocalizedError, Equatable {
 /// cleared in the same transaction, which is what the Nightscout upload controllers key on
 /// (`BaseNightscoutManager.wireUploadControllers`).
 protocol AdjustmentManager {
+    /// `date`: when it happened; the untethered watch reports its adjustments later.
+    @discardableResult func activateOverride(
+        _ preset: AdjustmentRef,
+        source: AdjustmentSource,
+        waitForUpload: Bool,
+        at date: Date
+    ) async throws -> AdjustmentOutcome
+
+    @discardableResult func cancelOverride(source: AdjustmentSource, waitForUpload: Bool, at date: Date) async throws
+        -> AdjustmentOutcome
+
+    @discardableResult func activateTempTarget(
+        _ preset: AdjustmentRef,
+        source: AdjustmentSource,
+        waitForUpload: Bool,
+        at date: Date
+    ) async throws -> AdjustmentOutcome
+
+    @discardableResult func cancelTempTarget(source: AdjustmentSource, waitForUpload: Bool, at date: Date) async throws
+        -> AdjustmentOutcome
+}
+
+extension AdjustmentManager {
     @discardableResult func activateOverride(
         _ preset: AdjustmentRef,
         source: AdjustmentSource,
         waitForUpload: Bool
-    ) async throws -> AdjustmentOutcome
+    ) async throws -> AdjustmentOutcome {
+        try await activateOverride(preset, source: source, waitForUpload: waitForUpload, at: Date())
+    }
 
-    @discardableResult func cancelOverride(source: AdjustmentSource, waitForUpload: Bool) async throws -> AdjustmentOutcome
+    @discardableResult func cancelOverride(source: AdjustmentSource, waitForUpload: Bool) async throws -> AdjustmentOutcome {
+        try await cancelOverride(source: source, waitForUpload: waitForUpload, at: Date())
+    }
 
     @discardableResult func activateTempTarget(
         _ preset: AdjustmentRef,
         source: AdjustmentSource,
         waitForUpload: Bool
-    ) async throws -> AdjustmentOutcome
+    ) async throws -> AdjustmentOutcome {
+        try await activateTempTarget(preset, source: source, waitForUpload: waitForUpload, at: Date())
+    }
 
-    @discardableResult func cancelTempTarget(source: AdjustmentSource, waitForUpload: Bool) async throws -> AdjustmentOutcome
-}
+    @discardableResult func cancelTempTarget(source: AdjustmentSource, waitForUpload: Bool) async throws -> AdjustmentOutcome {
+        try await cancelTempTarget(source: source, waitForUpload: waitForUpload, at: Date())
+    }
 
-extension AdjustmentManager {
     @discardableResult func activateOverride(
         _ preset: AdjustmentRef,
         source: AdjustmentSource
@@ -134,16 +163,19 @@ final class BaseAdjustmentManager: AdjustmentManager, Injectable, @unchecked Sen
     @discardableResult func activateOverride(
         _ preset: AdjustmentRef,
         source: AdjustmentSource,
-        waitForUpload: Bool
+        waitForUpload: Bool,
+        at date: Date
     ) async throws -> AdjustmentOutcome {
-        let outcome = try await serializer.run { try await self.commitOverride(activating: preset) }
+        let outcome = try await serializer.run { try await self.commitOverride(activating: preset, at: date) }
         info(.treatments, "Override activated from \(source.rawValue): \(outcome.logDescription)")
         await applyOverrideSideEffects(source: source, waitForUpload: waitForUpload)
         return outcome
     }
 
-    @discardableResult func cancelOverride(source: AdjustmentSource, waitForUpload: Bool) async throws -> AdjustmentOutcome {
-        let outcome = try await serializer.run { try await self.commitOverride(activating: nil) }
+    @discardableResult func cancelOverride(source: AdjustmentSource, waitForUpload: Bool, at date: Date) async throws
+        -> AdjustmentOutcome
+    {
+        let outcome = try await serializer.run { try await self.commitOverride(activating: nil, at: date) }
         info(.treatments, "Override cancelled from \(source.rawValue): \(outcome.logDescription)")
         await applyOverrideSideEffects(source: source, waitForUpload: waitForUpload)
         return outcome
@@ -152,12 +184,11 @@ final class BaseAdjustmentManager: AdjustmentManager, Injectable, @unchecked Sen
     /// `activating == nil` cancels whatever runs. Ending the active rows and enabling the
     /// requested one share one transaction, so no command can leave the app with nothing enabled
     /// or with two adjustments enabled at once.
-    private func commitOverride(activating preset: AdjustmentRef?) async throws -> AdjustmentOutcome {
+    private func commitOverride(activating preset: AdjustmentRef?, at now: Date) async throws -> AdjustmentOutcome {
         let context = makeContext()
         context.name = "commitOverride"
 
         return try await context.perform {
-            let now = Date()
             let target = try preset.map { try self.fetchOverride($0, in: context) }
             let active = try self.fetchActiveOverrides(in: context)
 
@@ -212,16 +243,19 @@ final class BaseAdjustmentManager: AdjustmentManager, Injectable, @unchecked Sen
     @discardableResult func activateTempTarget(
         _ preset: AdjustmentRef,
         source: AdjustmentSource,
-        waitForUpload: Bool
+        waitForUpload: Bool,
+        at date: Date
     ) async throws -> AdjustmentOutcome {
-        let (outcome, orefTarget) = try await serializer.run { try await self.commitTempTarget(activating: preset) }
+        let (outcome, orefTarget) = try await serializer.run { try await self.commitTempTarget(activating: preset, at: date) }
         info(.treatments, "Temp target activated from \(source.rawValue): \(outcome.logDescription)")
         await applyTempTargetSideEffects(orefTarget: orefTarget, source: source, waitForUpload: waitForUpload)
         return outcome
     }
 
-    @discardableResult func cancelTempTarget(source: AdjustmentSource, waitForUpload: Bool) async throws -> AdjustmentOutcome {
-        let (outcome, orefTarget) = try await serializer.run { try await self.commitTempTarget(activating: nil) }
+    @discardableResult func cancelTempTarget(source: AdjustmentSource, waitForUpload: Bool, at date: Date) async throws
+        -> AdjustmentOutcome
+    {
+        let (outcome, orefTarget) = try await serializer.run { try await self.commitTempTarget(activating: nil, at: date) }
         info(.treatments, "Temp target cancelled from \(source.rawValue): \(outcome.logDescription)")
         await applyTempTargetSideEffects(orefTarget: orefTarget, source: source, waitForUpload: waitForUpload)
         return outcome
@@ -229,12 +263,14 @@ final class BaseAdjustmentManager: AdjustmentManager, Injectable, @unchecked Sen
 
     /// Returns the outcome plus the entry to hand oref, which has to be built inside the
     /// transaction while the row is still safe to read on this context.
-    private func commitTempTarget(activating preset: AdjustmentRef?) async throws -> (AdjustmentOutcome, TempTarget?) {
+    private func commitTempTarget(
+        activating preset: AdjustmentRef?,
+        at now: Date
+    ) async throws -> (AdjustmentOutcome, TempTarget?) {
         let context = makeContext()
         context.name = "commitTempTarget"
 
         return try await context.perform {
-            let now = Date()
             let target = try preset.map { try self.fetchTempTarget($0, in: context) }
             let active = try self.fetchActiveTempTargets(in: context)
 

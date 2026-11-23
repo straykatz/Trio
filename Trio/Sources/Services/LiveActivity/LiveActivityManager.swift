@@ -268,9 +268,11 @@ final class LiveActivityData: ObservableObject {
                 debug(.liveActivity, "Pushing update after recreation")
                 await pushUpdate(state)
             } else {
+                // in watch mode stale by the newest reading, as the iPhone doesn't loop
+                let freshAt = state.watchMode == true ? state.detailedViewState.chart.map(\.date).max() : state.date
                 let content = ActivityContent(
                     state: state,
-                    staleDate: min(state.date ?? Date.now, Date.now).addingTimeInterval(360)
+                    staleDate: min(freshAt ?? Date.now, Date.now).addingTimeInterval(360)
                 )
                 // Before the update, check if currentActivity is still valid
                 if let stillCurrent = self.currentActivity, stillCurrent.activity.id == currentActivity.activity.id {
@@ -405,7 +407,7 @@ final class LiveActivityData: ObservableObject {
             return
         }
 
-        let content = LiveActivityAttributes.ContentState(
+        var content = LiveActivityAttributes.ContentState(
             new: bg,
             prev: prevGlucose,
             units: settings.units,
@@ -417,6 +419,8 @@ final class LiveActivityData: ObservableObject {
             tempTarget: data.tempTarget,
             widgetItems: data.widgetItems
         )
+        // the watch loops: the iPhone's last loop is old by design, not stale
+        if !UntetheredGate.state.session.isIdle { content.watchMode = true }
 
         await pushUpdate(content)
     }

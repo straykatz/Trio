@@ -28,6 +28,24 @@ final class WatchNotificationHandler: NSObject, UNUserNotificationCenterDelegate
         }
     }
 
+    /// Shows the watch's own alerts even when Trio is open on the wrist: the reader's (raised while the iPhone is out
+    /// of reach) and untethered mode's, which are the only alarms while the watch loops. Everything else keeps the
+    /// system's default handling.
+    func userNotificationCenter(
+        _: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        let id = notification.request.identifier
+        if id.hasPrefix(WatchG7Reader.notificationIdentifierPrefix)
+            || id.hasPrefix(UntetheredWatchManager.notificationPrefix)
+        {
+            completionHandler([.banner, .list, .sound])
+        } else {
+            completionHandler([])
+        }
+    }
+
     /// UNUserNotificationCenterDelegate method called when user interacts with a notification on watch.
     /// This can be called off the main thread. WCSession.transferUserInfo is thread-safe.
     func userNotificationCenter(
@@ -36,6 +54,16 @@ final class WatchNotificationHandler: NSObject, UNUserNotificationCenterDelegate
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         defer { completionHandler() }
+
+        // a tap on a notice that asks for action ("Watch Took Over: Open Trio", pairing) answers it: no reminders,
+        // whether or not Trio counts as in front by the time it runs (31 October, 11:09)
+        let id = response.notification.request.identifier
+        if id.hasPrefix(UntetheredWatchManager.notificationPrefix) || id.hasPrefix(WatchG7Reader.notificationIdentifierPrefix) {
+            ActionNotice.clearReminders()
+            let title = response.notification.request.content.title
+            let how = response.actionIdentifier == UNNotificationDefaultActionIdentifier ? "opened" : "dismissed or other action"
+            Task { await WatchLogger.shared.log("⌚️ Notice tapped: \(title) (\(how))", force: true) }
+        }
 
         guard let action = NotificationResponseAction(rawValue: response.actionIdentifier) else { return }
         sendSnoozeRequest(minutes: action.minutes)

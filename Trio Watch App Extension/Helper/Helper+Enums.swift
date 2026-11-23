@@ -66,4 +66,30 @@ enum WatchSize {
             return .unknown
         }
     }
+
+    /// Diameter of the pump / sensor lifetime ring on PeripheralsView (EJM0/Trio, Elias Maurer).
+    var peripheralRingSize: CGFloat {
+        switch self {
+        case .watch40mm,
+             .watch41mm: return 46
+        case .watch42mm,
+             .watch44mm: return 50
+        case .unknown,
+             .watch45mm,
+             .watch49mm: return 54
+        }
+    }
+
+    /// Stroke width of the pump / sensor lifetime ring on PeripheralsView.
+    var peripheralRingLineWidth: CGFloat {
+        switch self {
+        case .watch40mm,
+             .watch41mm,
+             .watch42mm: return 3.5
+        case .unknown,
+             .watch44mm,
+             .watch45mm,
+             .watch49mm: return 4
+        }
+    }
 }

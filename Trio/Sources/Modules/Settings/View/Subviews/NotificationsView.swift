@@ -58,6 +58,8 @@ struct NotificationsView: BaseView {
                     notificationsEnabledStatus
 
                     manageNotifications
+
+                    criticalAlertsToggle
                 }
             ).listRowBackground(Color.chart)
 
@@ -122,6 +124,22 @@ struct NotificationsView: BaseView {
 }
 
 extension NotificationsView {
+    private var criticalAlertsToggle: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle("Critical Alerts", isOn: $state.useCriticalAlerts)
+                .onChange(of: state.useCriticalAlerts) { _, newValue in
+                    if newValue {
+                        state.requestCriticalAlertsPermission()
+                    }
+                }
+            Text(
+                "Lets urgent Trio alarms (like urgent-low glucose or not looping) sound even when your phone is muted or in Do Not Disturb. Needs a build signed with Apple's Critical Alerts entitlement; without it, these alarms come as normal notifications."
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+    }
+
     func notificationReminder() -> Alert {
         Alert(
             title: Text("\u{2757} Notifications are Required"),

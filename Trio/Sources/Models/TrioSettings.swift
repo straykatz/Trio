@@ -16,6 +16,15 @@ enum BolusShortcutLimit: String, JSON, CaseIterable, Identifiable {
 }
 
 struct TrioSettings: JSON, Equatable, Encodable {
+    /// Maximum number of meal-time reminder preset buttons offered in the bolus calculator.
+    static let mealTimeReminderPresetLimit = 3
+
+    /// Drops non-positive and duplicate entries, sorts, and caps to `mealTimeReminderPresetLimit`.
+    static func normalizedMealTimeReminderPresets(_ presets: [Decimal]) -> [Decimal] {
+        let normalized = Array(Set(presets.filter { $0 > 0 })).sorted()
+        return Array(normalized.prefix(mealTimeReminderPresetLimit))
+    }
+
     var units: GlucoseUnits = .mgdL
     var dosingMode: DosingMode = .open
     var isUploadEnabled: Bool = false
@@ -57,11 +66,32 @@ struct TrioSettings: JSON, Equatable, Encodable {
     var maxProtein: Decimal = 250
     var confirmBolusFaster: Bool = false
     var showForecastWatch: Bool = false
+    /// Lets the watch start untethered mode from the phone's saved grant while the iPhone is unavailable. Off until
+    /// chosen: the watch would dose from a copy of the phone's state that may be some time old.
+    var allowUntetheredStartWithoutPhoneWatch: Bool = false
+    /// With Allow Start Without iPhone on: the watch starts untethered mode by itself when the iPhone stops
+    /// sending readings and is out of reach (Elias Maurer's fallback loop). Off until chosen.
+    var fallbackLoopWatch: Bool = false
+    /// The watch keeps Trio running through untethered mode with a workout session that is never saved.
+    var untetheredWorkoutWatch: Bool = false
+    /// What Extended Untethered Mode's minimal watch screen shows, and where.
+    var watchGlanceLayout: WatchGlanceLayout = .standard
+    /// Off: the workout keeps Trio running, but the wrist shows the full app, not the minimal screen.
+    var watchGlanceEnabled: Bool = true
+    /// Untethered watch mode offered at all: off, neither the phone nor the watch starts it.
+    var untetheredModeWatch: Bool = true
+    /// While untethered with the phone out of reach, the watch uploads its readings and loops to Nightscout itself,
+    /// over Wi-Fi or its own cellular connection. Off until chosen.
+    var nightscoutUploadWatch: Bool = false
+    /// The home screen's background takes the untethered color while the watch has the pump.
+    var untetheredTintHomeWatch: Bool = true
     var overrideFactor: Decimal = 0.8
     var fattyMeals: Bool = false
     var fattyMealFactor: Decimal = 0.7
     var sweetMeals: Bool = false
     var sweetMealFactor: Decimal = 1
+    var mealTimeReminderEnabled: Bool = false
+    var mealTimeReminderPresets: [Decimal] = [15, 30]
     var displayPresets: Bool = true
     var confirmBolus: Bool = false
     var enableQuickPickTreatments: Bool = false
@@ -75,6 +105,10 @@ struct TrioSettings: JSON, Equatable, Encodable {
     var homeStatsPanelFace: HomeStatsPanelFace = .timeInRange
     var homeStatsPanelRange: HomeStatsPanelRange = .today
     var requireAdjustmentsConfirmation: Bool = false
+
+    /// Whether the app should request iOS's Critical Alerts authorization, letting
+    /// urgent alarms (e.g. urgent-low glucose, not-looping) bypass Silent Mode and Do Not Disturb.
+    var useCriticalAlerts: Bool = false
 
     /// Selected Garmin watchface (Trio or SwissAlpine)
     var garminWatchface: GarminWatchface = .trio
@@ -224,6 +258,14 @@ extension TrioSettings: Decodable {
             settings.sweetMealFactor = sweetMealFactor
         }
 
+        if let mealTimeReminderEnabled = try? container.decode(Bool.self, forKey: .mealTimeReminderEnabled) {
+            settings.mealTimeReminderEnabled = mealTimeReminderEnabled
+        }
+
+        if let mealTimeReminderPresets = try? container.decode([Decimal].self, forKey: .mealTimeReminderPresets) {
+            settings.mealTimeReminderPresets = TrioSettings.normalizedMealTimeReminderPresets(mealTimeReminderPresets)
+        }
+
         if let overrideFactor = try? container.decode(Decimal.self, forKey: .overrideFactor) {
             settings.overrideFactor = overrideFactor
         }
@@ -288,6 +330,10 @@ extension TrioSettings: Decodable {
             settings.rulerMarks = rulerMarks
         }
 
+        if let useCriticalAlerts = try? container.decode(Bool.self, forKey: .useCriticalAlerts) {
+            settings.useCriticalAlerts = useCriticalAlerts
+        }
+
         if let bolusDisplayThreshold = try? container.decode(BolusDisplayThreshold.self, forKey: .bolusDisplayThreshold) {
             settings.bolusDisplayThreshold = bolusDisplayThreshold
         }
@@ -316,8 +362,40 @@ extension TrioSettings: Decodable {
             settings.confirmBolusFaster = confirmBolusFaster
         }
 
+        if let allowStart = try? container.decode(Bool.self, forKey: .allowUntetheredStartWithoutPhoneWatch) {
+            settings.allowUntetheredStartWithoutPhoneWatch = allowStart
+        }
+
+        if let fallbackLoopWatch = try? container.decode(Bool.self, forKey: .fallbackLoopWatch) {
+            settings.fallbackLoopWatch = fallbackLoopWatch
+        }
+
+        if let untetheredWorkoutWatch = try? container.decode(Bool.self, forKey: .untetheredWorkoutWatch) {
+            settings.untetheredWorkoutWatch = untetheredWorkoutWatch
+        }
+
+        if let watchGlanceLayout = try? container.decode(WatchGlanceLayout.self, forKey: .watchGlanceLayout) {
+            settings.watchGlanceLayout = watchGlanceLayout
+        }
+
+        if let watchGlanceEnabled = try? container.decode(Bool.self, forKey: .watchGlanceEnabled) {
+            settings.watchGlanceEnabled = watchGlanceEnabled
+        }
+
         if let showForecastWatch = try? container.decode(Bool.self, forKey: .showForecastWatch) {
             settings.showForecastWatch = showForecastWatch
+        }
+
+        if let untetheredModeWatch = try? container.decode(Bool.self, forKey: .untetheredModeWatch) {
+            settings.untetheredModeWatch = untetheredModeWatch
+        }
+
+        if let nightscoutUploadWatch = try? container.decode(Bool.self, forKey: .nightscoutUploadWatch) {
+            settings.nightscoutUploadWatch = nightscoutUploadWatch
+        }
+
+        if let untetheredTintHomeWatch = try? container.decode(Bool.self, forKey: .untetheredTintHomeWatch) {
+            settings.untetheredTintHomeWatch = untetheredTintHomeWatch
         }
 
         if let displayPresets = try? container.decode(Bool.self, forKey: .displayPresets) {

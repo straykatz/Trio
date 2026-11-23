@@ -19,6 +19,8 @@ protocol PumpHistoryStorage {
     func getPumpHistoryNotYetUploadedToNightscout() async throws -> [NightscoutTreatment]
     func getPumpHistoryNotYetUploadedToHealth() async throws -> [PumpHistoryEvent]
     func getPumpHistoryNotYetUploadedToTidepool() async throws -> [PumpHistoryEvent]
+    /// Finalizes the doses still in flight that started after `date` (all of them without one), as programmed.
+    @discardableResult func keepInFlightDoses(startedAfter date: Date?) async throws -> Int
 }
 
 final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
@@ -192,11 +194,16 @@ final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
 
             // Mutable rows are the pump's assertions (LoopKit contract): a
             // complete pending report supersedes any it no longer contains.
+            // Doses the watch ran in untethered mode are its pump manager's
+            // assertions, not this one's: this report can't withdraw them.
             var purgedUploadedIds: [String] = []
             if replacePendingEvents {
+                let heldByWatch = UntetheredGate.state.watchPendingDoseIdentifiers
                 let request = PumpEventStored.fetchRequest() as NSFetchRequest<PumpEventStored>
                 request.predicate = NSPredicate(format: "isMutable == YES")
-                for orphan in try context.fetch(request) where !assertedRows.contains(orphan.objectID) {
+                for orphan in try context.fetch(request)
+                    where !assertedRows.contains(orphan.objectID) && !heldByWatch.contains(orphan.syncIdentifier ?? "")
+                {
                     debug(
                         .storage,
                         "Purging stale pending pump event \(orphan.syncIdentifier ?? orphan.id ?? "-") (\(orphan.type ?? "?")), uploaded to Nightscout: \(orphan.isUploadedToNS)"
@@ -219,6 +226,30 @@ final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
                 throw error
             }
             return purgedUploadedIds
+        }
+    }
+
+    /// The phone's doses in flight when the watch started without it, after the copy it started from: its pump manager
+    /// gave them away at the release, the watch never had them, so nobody would report them again and the take-back's
+    /// pending report would purge them. Kept as programmed; a bolus the watch can't
+    /// cancel runs to its end, a temp is cut short by the watch's next.
+    @discardableResult func keepInFlightDoses(startedAfter date: Date?) async throws -> Int {
+        let context = makeContext()
+        context.name = "keepInFlightDoses"
+        return try await context.perform {
+            let heldByWatch = UntetheredGate.state.watchPendingDoseIdentifiers
+            let request = PumpEventStored.fetchRequest() as NSFetchRequest<PumpEventStored>
+            request.predicate = date.map { NSPredicate(format: "isMutable == YES AND timestamp > %@", $0 as NSDate) }
+                ?? NSPredicate(format: "isMutable == YES")
+            let rows = try context.fetch(request).filter { !heldByWatch.contains($0.syncIdentifier ?? "") }
+            for row in rows {
+                row.isMutable = false
+                debug(.storage, "Kept in-flight \(row.type ?? "?") \(row.syncIdentifier ?? row.id ?? "-") as programmed")
+            }
+            guard context.hasChanges else { return 0 }
+            try context.save()
+            self.updateSubject.send(())
+            return rows.count
         }
     }
 
@@ -361,7 +392,9 @@ final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
                         id: event.id ?? UUID().uuidString,
                         type: .bolus,
                         timestamp: event.timestamp ?? Date(),
-                        amount: event.bolus?.amount as Decimal?
+                        amount: event.bolus?.amount as Decimal?,
+                        // the untethered audit leaves insulin entered by hand out of what the pump delivered
+                        isExternal: event.bolus?.isExternal ?? false
                     )
                 case PumpEventStored.EventType.tempBasal.rawValue:
                     return PumpHistoryEvent(

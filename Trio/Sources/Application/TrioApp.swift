@@ -84,6 +84,7 @@ extension Notification.Name {
             _ = resolver.resolve(LiveActivityManager.self)!
         }
         _ = resolver.resolve(IOBService.self)!
+        _ = resolver.resolve(MealTimeReminderService.self)!
         _ = resolver.resolve(GlucoseAlertCoordinator.self)!
         _ = resolver.resolve(NotLoopingMonitor.self)!
         _ = DeviceAlertsStore.shared
@@ -225,8 +226,28 @@ extension Notification.Name {
                 await MainActor.run {
                     self.initState.error = true
                     Foundation.NotificationCenter.default.post(name: .initializationError, object: nil)
+                    if !UIApplication.shared.isProtectedDataAvailable {
+                        self.retryCoreDataInitializationWhenUnlocked()
+                    }
                 }
             }
+        }
+    }
+
+    /// After a restart, iOS can start Trio in the background (for the CGM's or pump's Bluetooth) before the phone
+    /// has been unlocked for the first time, when the database can't be opened yet. Trio then tries again by itself
+    /// as soon as the phone is unlocked, so it loops again without having to be opened and retried by hand.
+    @MainActor private func retryCoreDataInitializationWhenUnlocked() {
+        info(.storage, "Core Data can't be opened while the phone is locked; retrying once it is unlocked")
+        Task { @MainActor in
+            for await _ in Foundation.NotificationCenter.default
+                .notifications(named: UIApplication.protectedDataDidBecomeAvailableNotification)
+            {
+                break
+            }
+            guard self.initState.error else { return }
+            info(.storage, "Phone unlocked; retrying Core Data initialization")
+            self.retryCoreDataInitialization()
         }
     }
 

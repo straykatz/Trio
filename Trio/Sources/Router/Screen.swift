@@ -89,30 +89,47 @@ extension Screen {
                 bluetoothManager: resolver.resolve(BluetoothStateManager.self)!
             )
         case .basalProfileEditor:
-            BasalProfileEditor.RootView(resolver: resolver)
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                BasalProfileEditor.RootView(resolver: resolver)
+            }
         case .isfEditor:
-            ISFEditor.RootView(resolver: resolver)
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                ISFEditor.RootView(resolver: resolver)
+            }
         case .crEditor:
-            CarbRatioEditor.RootView(resolver: resolver)
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                CarbRatioEditor.RootView(resolver: resolver)
+            }
         case .targetsEditor:
-            TargetsEditor.RootView(resolver: resolver)
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                TargetsEditor.RootView(resolver: resolver)
+            }
+        // switching or editing a profile changes what the watch doses with: locked as the other therapy settings
         case .therapyProfiles:
-            TherapyProfiles.RootView(resolver: resolver)
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                TherapyProfiles.RootView(resolver: resolver)
+            }
         case let .therapyProfileDetail(name):
-            TherapyProfiles.ProfileRootView(resolver: resolver, profileName: name)
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                TherapyProfiles.ProfileRootView(resolver: resolver, profileName: name)
+            }
         case let .therapyProfileEditor(editor, profileName):
-            switch editor {
-            case .basal:
-                BasalProfileEditor.RootView(resolver: resolver, profileName: profileName)
-            case .carbRatio:
-                CarbRatioEditor.RootView(resolver: resolver, profileName: profileName)
-            case .sensitivity:
-                ISFEditor.RootView(resolver: resolver, profileName: profileName)
-            case .target:
-                TargetsEditor.RootView(resolver: resolver, profileName: profileName)
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                switch editor {
+                case .basal:
+                    BasalProfileEditor.RootView(resolver: resolver, profileName: profileName)
+                case .carbRatio:
+                    CarbRatioEditor.RootView(resolver: resolver, profileName: profileName)
+                case .sensitivity:
+                    ISFEditor.RootView(resolver: resolver, profileName: profileName)
+                case .target:
+                    TargetsEditor.RootView(resolver: resolver, profileName: profileName)
+                }
             }
         case .treatmentView:
-            Treatments.RootView(resolver: resolver)
+            UntetheredTreatmentGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                Treatments.RootView(resolver: resolver)
+            }
         case .history:
             History.RootView(resolver: resolver)
         case .cgm:
@@ -130,7 +147,9 @@ extension Screen {
         case .alarmWindows:
             AlarmWindows.RootView(resolver: resolver)
         case .mealSettings:
-            MealSettings.RootView(resolver: resolver)
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                MealSettings.RootView(resolver: resolver)
+            }
         case .iconConfig:
             IconConfig.RootView(resolver: resolver)
         case .overrideConfig:
@@ -142,11 +161,15 @@ extension Screen {
         case .userInterfaceSettings:
             UserInterfaceSettings.RootView(resolver: resolver)
         case .bolusCalculatorConfig:
-            BolusCalculatorConfig.RootView(resolver: resolver)
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                BolusCalculatorConfig.RootView(resolver: resolver)
+            }
         case .quickPickTreatmentsConfig:
             QuickPickTreatmentsConfig.RootView(resolver: resolver)
         case .dynamicISF:
-            DynamicSettings.RootView(resolver: resolver)
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                DynamicSettings.RootView(resolver: resolver)
+            }
         case .calibrations:
             Calibrations.RootView(resolver: resolver)
         case .shortcutsConfig:
@@ -174,15 +197,25 @@ extension Screen {
         case .serviceSettings:
             ServicesView(resolver: resolver, state: Settings.StateModel())
         case .autosensSettings:
-            AutosensSettings.RootView(resolver: resolver)
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                AutosensSettings.RootView(resolver: resolver)
+            }
         case .smbSettings:
-            SMBSettings.RootView(resolver: resolver)
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                SMBSettings.RootView(resolver: resolver)
+            }
         case .targetBehavior:
-            TargetBehavoir.RootView(resolver: resolver)
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                TargetBehavoir.RootView(resolver: resolver)
+            }
         case .algorithmAdvancedSettings:
-            AlgorithmAdvancedSettings.RootView(resolver: resolver)
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                AlgorithmAdvancedSettings.RootView(resolver: resolver)
+            }
         case .unitsAndLimits:
-            UnitsLimitsSettings.RootView(resolver: resolver)
+            UntetheredSettingsGate(manager: resolver.resolve(UntetheredPhoneManager.self)!) {
+                UnitsLimitsSettings.RootView(resolver: resolver)
+            }
         case .appDiagnostics:
             AppDiagnostics.RootView(resolver: resolver)
         case .settingsExport:

@@ -31,11 +31,22 @@ extension Home {
         @ObservationIgnored @Injected() var bluetoothManager: BluetoothStateManager!
         @ObservationIgnored @Injected() var therapyProfileManager: TherapyProfileManager!
         @ObservationIgnored @Injected() var iobService: IOBService!
+        @ObservationIgnored @Injected() var mealTimeReminderService: MealTimeReminderService!
         @ObservationIgnored @Injected() var fileStorage: FileStorage!
         @ObservationIgnored @Injected() var unlockmanager: UnlockManager!
 
         var cgmStateModel: CGMSettings.StateModel {
             CGMSettings.StateModel.shared
+        }
+
+        @MainActor var pendingMealTimeReminder: PendingMealTimeReminder? {
+            guard resolver != nil else { return nil }
+            return mealTimeReminderService.pendingReminder
+        }
+
+        @MainActor func cancelMealTimeReminder() {
+            guard resolver != nil else { return }
+            mealTimeReminderService.cancelPendingReminders()
         }
 
         private let timer = DispatchTimer(timeInterval: 30)
@@ -910,7 +921,8 @@ extension Home {
         /// Sensor expiration for the home label. Prefers manager-reported
         /// dates; reverse-derives from `lifecycle.percentComplete` when not.
         /// `activatedAt` must be session start, not transmitter activation.
-        private static func resolveSensorExpiresAt(
+        /// Also what the watch's Devices page counts down to (`AppleWatchManager.peripheralDetails`).
+        static func resolveSensorExpiresAt(
             manager: CGMManagerUI?,
             glucoseSource: GlucoseSource?
         ) -> Date? {

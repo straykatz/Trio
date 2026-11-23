@@ -35,3 +35,22 @@ extension OverrideStored {
         case nsExercise = "Exercise"
     }
 }
+
+extension OverrideStored {
+    private static let untetheredButtonKey = "untetheredButtonOverrideIDs"
+
+    /// Offers untethered watch mode next to this override's cancel button. Kept outside Core Data,
+    /// so a build without untethered mode still opens the same store.
+    var showUntetheredButton: Bool {
+        get {
+            guard let id else { return false }
+            return (UserDefaults.standard.stringArray(forKey: Self.untetheredButtonKey) ?? []).contains(id)
+        }
+        set {
+            guard let id else { return }
+            var ids = Set(UserDefaults.standard.stringArray(forKey: Self.untetheredButtonKey) ?? [])
+            if newValue { ids.insert(id) } else { ids.remove(id) }
+            UserDefaults.standard.set(Array(ids), forKey: Self.untetheredButtonKey)
+        }
+    }
+}

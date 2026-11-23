@@ -151,7 +151,7 @@ extension Home.StateModel {
     /// otherwise.
     private func storeQuickPickCarbs(_ carbAmount: Decimal?) async -> Home.QuickPickTreatmentOutcome.ActionResult? {
         guard let carbAmount else { return nil }
-        guard carbAmount > 0 else { return .failed }
+        guard carbAmount > 0, UntetheredGate.state.session.isIdle else { return .failed }
 
         do {
             // Suggestions are already filtered against Max Carbs when the sheet loads; re-cap here

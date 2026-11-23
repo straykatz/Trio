@@ -1,3 +1,4 @@
+import HealthKit
 import SwiftUI
 import UIKit
 import UserNotifications
@@ -26,6 +27,19 @@ class AppDelegate: NSObject, UIApplicationDelegate, ObservableObject, UNUserNoti
     /// the overdue window every time the user brings Trio to the foreground,
     /// since `scheduleRecurring`'s GCD timer doesn't fire while suspended.
     /// No-op if a send already landed within the last 24h.
+    /// The watch app asks HealthKit for workouts and the heart rate (Extended Untethered Mode). A watch app that
+    /// depends on its iPhone app gets that permission through it: without this the request came back unanswered, with
+    /// no prompt anywhere ("no permission to use workouts", 25 October). Now iOS asks on the phone.
+    func applicationShouldRequestHealthAuthorization(_: UIApplication) {
+        HKHealthStore().handleAuthorizationForExtension { success, error in
+            if let error {
+                warning(.watch, "Health permission for the watch app: \(error.localizedDescription)")
+            } else {
+                debug(.watch, "Health permission for the watch app handled: \(success)")
+            }
+        }
+    }
+
     func applicationWillEnterForeground(_: UIApplication) {
         telemetry?.checkAndSendIfOverdue(reason: .foreground)
     }

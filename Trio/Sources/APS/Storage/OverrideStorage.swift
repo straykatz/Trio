@@ -155,6 +155,7 @@ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
             newOverride.cr = override.cr
             newOverride.enabled = override.enabled
             newOverride.smbIsOff = override.smbIsOff
+            newOverride.showUntetheredButton = override.showUntetheredButton
             if override.overrideTarget {
                 newOverride.target = override.target as NSDecimalNumber
             } else {
@@ -189,6 +190,7 @@ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
         newOverride.indefinite = override.indefinite
         newOverride.percentage = override.percentage
         newOverride.smbIsOff = override.smbIsOff
+        newOverride.showUntetheredButton = override.showUntetheredButton
         newOverride.name = override.name
         newOverride.isPreset = false // no Preset
         newOverride.date = override.date?

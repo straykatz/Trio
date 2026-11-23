@@ -5,7 +5,10 @@ enum MultiUsePanelState: Equatable {
     case notificationsDisabled
     case pumpTimeMismatch
     case cgmStale
+    /// What the pump delivered in an untethered session and what the complete history says still differ.
+    case untetheredAudit(String)
     case maxIOBZero
+    case mealTimeReminderCountdown(PendingMealTimeReminder)
     case tidepoolLoginRequired
     case whatsNew
     case dosingModeLimited(DosingMode)
@@ -19,14 +22,22 @@ enum MultiUsePanelState: Equatable {
         pumpTimeMismatch: Bool,
         lastGlucoseDate: Date?,
         maxIOB: Decimal,
+        pendingMealTimeReminder: PendingMealTimeReminder?,
         tidepoolLoginRequired: Bool,
         hasUnacknowledgedReleaseNotes: Bool,
         dosingMode: DosingMode,
+        untetheredAuditFinding: String? = nil,
         now: Date
     ) -> MultiUsePanelState {
+        // Without notifications the reminder itself may never arrive (pre-iOS 26 path), so this stays on top.
         if notificationsDisabled { return .notificationsDisabled }
+        // A pending meal-time reminder was just armed by the user and lasts at most an hour, and its banner
+        // holds the only in-app stop button, so it outranks the standing warnings below; they return once it ends.
+        if let pendingMealTimeReminder { return .mealTimeReminderCountdown(pendingMealTimeReminder) }
         if pumpTimeMismatch { return .pumpTimeMismatch }
         if now.timeIntervalSince(lastGlucoseDate ?? .distantPast) > cgmStaleAfter { return .cgmStale }
+        // insulin on board may be off: ahead of the standing settings below, which would hide it for good
+        if let untetheredAuditFinding { return .untetheredAudit(untetheredAuditFinding) }
         // constrained modes clamp Max IOB to 0 without touching the stored value
         if dosingMode.automation == .reductionsOnly || dosingMode.automation == .hypoSuspendOnly {
             return .dosingModeLimited(dosingMode)

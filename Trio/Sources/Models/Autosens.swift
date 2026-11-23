@@ -1,7 +1,7 @@
 import Foundation
 
-struct Autosens: JSON {
-    struct DebugInfo: Codable {
+struct Autosens: JSON, Equatable {
+    struct DebugInfo: Codable, Equatable {
         let iobClock: Date
         let bgi: Decimal
         let iobActivity: Decimal

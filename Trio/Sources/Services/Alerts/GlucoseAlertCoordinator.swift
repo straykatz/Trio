@@ -133,6 +133,13 @@ final class GlucoseAlertCoordinator: Injectable {
     /// onto `evaluationQueue` to mutate `firingAlertIDs` safely.
     private func evaluateGlucoseAlarms() async {
         guard !isInLaunchQuietWindow else { return }
+        // While the Apple Watch has the pump it raises low, urgent low and high from its own readings, which reach the
+        // phone late or not at all: the phone's reading alarms pause instead of coming twice or on stale values. After
+        // Elias Maurer's Watch Loop (EJM0/Trio feat/watch-loop-4/5). Forecast and carbs-required alarms go on.
+        guard UntetheredGate.state.session.isIdle else {
+            retractReadingDrivenFiringAlarms()
+            return
+        }
         guard effectiveTrioAlertsEnabled else {
             retractReadingDrivenFiringAlarms()
             return

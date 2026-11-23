@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AppGroupID</key>
+	<string>$(APP_GROUP_ID)</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Trio on the watch can read your Dexcom G7 directly, so glucose and alerts keep working when your iPhone is out of reach. In untethered mode it also runs your pod.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Extended Untethered Mode runs a workout session to keep Trio running. The workout is never saved.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Extended Untethered Mode runs a workout session to keep Trio running. The workout is never saved.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+	</array>
+	<key>WKBackgroundModes</key>
+	<array>
+		<string>self-care</string>
+		<string>workout-processing</string>
+	</array>
+</dict>
+</plist>

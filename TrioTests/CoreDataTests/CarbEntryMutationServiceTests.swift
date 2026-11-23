@@ -244,6 +244,8 @@ private final class StubNightscoutManager: NightscoutManager {
     func uploadTempTargets() async {}
     func uploadProfiles() async throws {}
     func uploadNoteTreatment(note _: String) async -> Bool { true }
+    func uploadUntetheredSession(from _: Date, to _: Date?) async -> Bool { true }
+    func uploadDeterminationHistory(_: [Determination]) async -> Bool { true }
     func uploadTherapyProfiles() async {}
     func importSettings() async -> FetchedNightscoutProfileStore? { nil }
 }

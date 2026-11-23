@@ -667,6 +667,13 @@ final class BaseTherapyProfileManager: TherapyProfileManager, Injectable, @unche
     }
 
     func runDueScheduledSwitch() async {
+        // While the watch has the pump (watch mode), or before the phone can read whether it does, the switch waits
+        // until the phone has the pump back, as the loop does: a switch sends the pod a new basal schedule, and the
+        // phone has let go of the pod. The app's launch runs this too, not only the loop, which already waits.
+        guard UntetheredGate.phoneMayDose else {
+            debug(.settings, "Scheduled profile switch waits: the phone doesn't have the pump (watch mode)")
+            return
+        }
         let run: ScheduledSwitchRun
         do {
             run = try await serializer.run { try await self.runDueScheduledSwitchStep() }

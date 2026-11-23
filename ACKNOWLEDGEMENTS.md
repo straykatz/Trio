@@ -50,3 +50,8 @@ Trio's spoken alert sounds were generated with
 - Licence: **Public domain.** Credited here as a courtesy; no attribution is
   required.
 - Changes made by Trio: looped to a minimum duration of five seconds, as above.
+
+## The watch's G7 connection and untethered mode
+
+- `Trio Watch App Extension/G7Direct/G7SensorKit/` is copied from Jeremy Barnum's G7SensorKit on the watch ([LoopKit/G7SensorKit#80](https://github.com/LoopKit/G7SensorKit/pull/80)), © LoopKit Authors, MIT licence, with Trio's changes marked `Trio:`.
+- Untethered watch mode builds on Jeremy Barnum's Sport Mode for Loop ([LoopKit/Loop#2545](https://github.com/LoopKit/Loop/pull/2545)), the watch running the loop on its own, and was designed and written for Trio by Elias Maurer.

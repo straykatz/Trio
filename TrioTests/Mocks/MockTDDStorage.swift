@@ -10,6 +10,6 @@ struct MockTDDStorage: TDDStorage {
         TDDResult(total: 0, bolus: 0, tempBasal: 0, scheduledBasal: 0, weightedAverage: 0, hoursOfData: 0)
     }
 
-    func storeTDD(_: Trio.TDDResult) async { /* skip */ }
+    func storeTDD(_: Trio.TDDResult, at _: Date) async { /* skip */ }
     func hasSufficientTDD() async throws -> Bool { true }
 }

@@ -1,0 +1,108 @@
+name: Untethered unit tests
+
+# The algorithm package's tests (swift test), including the untethered ones, for this fork's own branches.
+# nightscout/Trio's "Automated unit tests" runs only in nightscout's repository, so this one runs here:
+# by itself after every push that changes the algorithm, untethered mode or its tests, and by hand from
+# Actions › Untethered unit tests › Run workflow (on a branch that has this file). The app build is untouched.
+
+on:
+  push:
+    branches:
+      - feature/untethered-fallback
+      - feature/untethered-fallback-ns
+      - feature/untethered-fallback-ns-g7next
+      - feature/untethered-pr-plus
+      - feature/untethered-pr-plus-next
+      - feature/untethered-pr-plus-next-ns
+      - feature/untethered-pr-plus-ns
+      - feature/untethered-t3
+      - feature/untethered-t3-exposed
+    paths:
+      - 'Trio/Sources/**'
+      - 'TrioTests/OpenAPSSwiftTests/**'
+      - 'AlgorithmPackage/**'
+      - '.github/workflows/untethered_unit_tests.yml'
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: 'Only tests whose name contains this (e.g. Untethered); empty runs them all'
+        required: false
+        default: ''
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  algorithm-package:
+    name: Algorithm package (swift test)
+    # the build's pool: the macos-26 queue left builds waiting (2026-10-21), and these tests too (2026-10-28: "The
+    # job was not acquired by Runner of type hosted even after multiple attempts")
+    runs-on: xcode-27
+    timeout-minutes: 45
+
+    steps:
+      - name: Select Xcode version
+        # as the build: a released Xcode, never a beta or release candidate; else the runner's default
+        run: |
+          XCODE=""
+          for x in /Applications/Xcode_26.5.app /Applications/Xcode_26.2.app /Applications/Xcode_27.1.app /Applications/Xcode_27.0.app; do
+            [ -d "$x" ] || continue
+            real=$(cd "$x" && pwd -P)
+            if echo "$real" | grep -qiE 'beta|release_candidate|_rc'; then continue; fi
+            XCODE="$real"; break
+          done
+          if [ -n "$XCODE" ]; then sudo xcode-select --switch "$XCODE/Contents/Developer"; fi
+          echo "Selected: ${XCODE:-runner default}"
+          xcodebuild -version
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Restore cache
+        id: spm-cache-restore
+        uses: actions/cache/restore@v5
+        with:
+          path: AlgorithmPackage/.build
+          key: ${{ runner.os }}-spm-algorithm-${{ hashFiles('AlgorithmPackage/Package.swift', 'AlgorithmPackage/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-algorithm-
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Run tests
+        env:
+          FILTER: ${{ github.event.inputs.filter }}
+        run: |
+          if [ -n "$FILTER" ]; then
+            time swift test --package-path AlgorithmPackage --filter "$FILTER"
+          else
+            time swift test --package-path AlgorithmPackage
+          fi
+
+      - name: Save cache
+        if: always() && steps.spm-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: AlgorithmPackage/.build
+          key: ${{ runner.os }}-spm-algorithm-${{ hashFiles('AlgorithmPackage/Package.swift', 'AlgorithmPackage/Package.resolved') }}
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "::notice title=Unit tests::✅ all tests passed"
+            echo "✅ All tests passed on \`${{ github.ref_name }}\` (${GITHUB_SHA::9})." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "::error title=Unit tests::❌ tests failed or didn't build"
+            {
+              echo "## ❌ Tests failed or didn't build on \`${{ github.ref_name }}\` (${GITHUB_SHA::9})"
+              echo ""
+              echo "Open the **Run tests** step and look for lines with \`error:\` (it didn't build) or"
+              echo "\`✘ Test\` / \`failed\` (a test failed). The test's name says what it checks."
+            } >> $GITHUB_STEP_SUMMARY
+          fi

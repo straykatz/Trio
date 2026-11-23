@@ -98,4 +98,11 @@ extension Determination {
     var reasonConclusion: String {
         reason.components(separatedBy: "; ").last ?? ""
     }
+
+    var minPredBGFromReason: Decimal? {
+        guard let part = reasonParts.first(where: { $0.contains("minPredBG") }),
+              let value = part.components(separatedBy: "minPredBG ").dropFirst().first
+        else { return nil }
+        return Decimal(string: value.trimmingCharacters(in: CharacterSet(charactersIn: "0123456789.-").inverted))
+    }
 }

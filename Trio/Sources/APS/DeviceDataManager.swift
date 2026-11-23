@@ -283,6 +283,8 @@ final class BaseDeviceDataManager: DeviceDataManager, Injectable {
     }
 
     func heartbeat(date: Date) {
+        guard UntetheredGate.phoneMayDose else { return }
+
         guard pumpUpdateCancellable == nil else {
             debug(.pump, "Pump update skipped: one is already running")
             return

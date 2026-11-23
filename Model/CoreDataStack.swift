@@ -164,7 +164,7 @@ class CoreDataStack: ObservableObject {
     private func fetchPersistentHistoryTransactionsAndChanges() async throws {
         let taskContext = newTaskContext()
         taskContext.name = "persistentHistoryContext"
-//        debug(.coreData,"Start fetching persistent history changes from the store ... \(DebuggingIdentifiers.inProgress)")
+//        debug(.storage,"Start fetching persistent history changes from the store ... \(DebuggingIdentifiers.inProgress)")
 
         try await taskContext.perform {
             // Execute the persistent history change since the last transaction
@@ -179,7 +179,7 @@ class CoreDataStack: ObservableObject {
     }
 
     private func mergePersistentHistoryChanges(from history: [NSPersistentHistoryTransaction]) {
-//        debug(.coreData,"Received \(history.count) persistent history transactions")
+//        debug(.storage,"Received \(history.count) persistent history transactions")
         // Update view context with objectIDs from history change request
         /// - Tag: mergeChanges
         let viewContext = persistentContainer.viewContext
@@ -448,7 +448,7 @@ extension CoreDataStack {
 
             // Guard check if there are NSManagedObjects older than the specified days
             guard !objectIDs.isEmpty else {
-//                debug(.coreData,"No objects found older than \(days) days.")
+//                debug(.storage,"No objects found older than \(days) days.")
                 return
             }
 
@@ -499,7 +499,7 @@ extension CoreDataStack {
             }
 
             guard !parentObjectIDs.isEmpty else {
-//                debug(.coreData,"No \(parentType) objects found older than \(days) days.")
+//                debug(.storage,"No \(parentType) objects found older than \(days) days.")
                 return
             }
 
@@ -513,7 +513,7 @@ extension CoreDataStack {
             }
 
             guard !childObjectIDs.isEmpty else {
-//                debug(.coreData,"No \(childType) objects found related to \(parentType) objects older than \(days) days.")
+//                debug(.storage,"No \(childType) objects found related to \(parentType) objects older than \(days) days.")
                 return
             }
 

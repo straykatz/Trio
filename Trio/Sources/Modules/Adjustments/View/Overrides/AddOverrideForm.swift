@@ -188,6 +188,15 @@ struct AddOverrideForm: View {
             .listRowBackground(Color.chart)
 
             Section {
+                Toggle("Show Watch Mode Button", isOn: $state.showUntetheredButton)
+            } footer: {
+                Text(
+                    "While this override runs, a watch button next to its cancel button hands the loop to the Apple Watch. Watch mode ends with the override."
+                )
+            }
+            .listRowBackground(Color.chart)
+
+            Section {
                 // Picker for ISF/CR settings
                 Picker("Disable SMBs", selection: $selectedDisableSmbOption) {
                     ForEach(DisableSmbOptions.allCases, id: \.self) { option in

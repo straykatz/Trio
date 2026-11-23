@@ -1,6 +1,6 @@
 import Foundation
 
-struct Override {
+struct Override: Codable, Equatable {
     let name: String
     let enabled: Bool
     let date: Date
@@ -21,4 +21,6 @@ struct Override {
     let end: Decimal
     let smbMinutes: Decimal
     let uamMinutes: Decimal
+    /// Offers untethered watch mode next to the override's cancel button on the home screen.
+    var showUntetheredButton = false
 }

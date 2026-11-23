@@ -4,12 +4,12 @@ protocol CarbRatiosObserver {
     func carbRatiosDidChange(_ carbRatios: CarbRatios)
 }
 
-struct CarbRatios: JSON {
+struct CarbRatios: JSON, Equatable {
     let units: CarbUnit
     let schedule: [CarbRatioEntry]
 }
 
-struct CarbRatioEntry: JSON {
+struct CarbRatioEntry: JSON, Equatable {
     let start: String
     let offset: Int
     let ratio: Decimal
