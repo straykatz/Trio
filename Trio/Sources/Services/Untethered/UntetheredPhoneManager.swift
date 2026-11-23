@@ -97,6 +97,17 @@ enum UntetheredGate {
         return !locked && state.session.isIdle && !state.pumpReturnPending
     }
 
+    /// After a take-back, until the watch's records are in (at most 2 minutes): the iPhone's insulin on board lacks
+    /// what the watch gave, so it neither loops nor boluses. 22 November, third tester: for 20 s after the take-back
+    /// IOB read −1.97 U instead of about +1.8 U, and a 0.5 U bolus went through. Without the records after 2 minutes
+    /// the iPhone doses again, as before; the audit books what no record explains.
+    static var watchRecordsPending: Bool {
+        guard let point = state.audit else { return false }
+        return Date().timeIntervalSince(point.end) < watchRecordsWait
+    }
+
+    static let watchRecordsWait: TimeInterval = 2 * 60
+
     /// Every change reaches the screens, whichever path made it. While the saved state is locked a change stays in
     /// memory only; the saved state, once read, is what counts.
     @discardableResult static func update<T>(_ change: (inout UntetheredPhoneState) -> T) -> T {

@@ -327,6 +327,10 @@ final class BaseAPSManager: APSManager, Injectable {
                 debug(.loop, "The watch is in charge of the pump (untethered) — skipping loop attempt")
                 return
             }
+            guard !UntetheredGate.watchRecordsPending else {
+                debug(.loop, "Waiting for the watch's records after the take-back (untethered) — skipping loop attempt")
+                return
+            }
             // Before the loop starts, so the loop doses with the new profile.
             await self.therapyProfileManager?.runDueScheduledSwitch()
 
@@ -466,6 +470,13 @@ final class BaseAPSManager: APSManager, Injectable {
         }
         guard UntetheredGate.phoneMayDose else {
             return APSError.invalidPumpState(message: String(localized: "The watch is in charge of the pump"))
+        }
+        guard !UntetheredGate.watchRecordsPending else {
+            return APSError.invalidPumpState(
+                message: String(
+                    localized: "The watch's records aren't in yet, so insulin on board is incomplete. Try again in a minute."
+                )
+            )
         }
         let status = pump.status.pumpStatus
 
